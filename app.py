@@ -5,12 +5,11 @@ from prophet import Prophet
 import io
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import timedelta
 
 st.set_page_config(page_title="Smart Forecast Pro", layout="wide", page_icon="🚀")
 
-st.title("🚀 Smart Forecast Pro - Plan d'Approvisionnement IA")
-st.markdown("### Prophet AI + Alertes Intelligentes + Dashboard Pro")
+st.title("🚀 Smart Forecast Pro - Assistant IA Supply Chain")
+st.markdown("### Prophet AI + Alertes + Consultant Stratégique IA")
 
 HORIZON_JOURS = 30
 
@@ -18,7 +17,7 @@ with st.sidebar:
     st.header("⚙️ Paramètres")
     HORIZON_JOURS = st.slider("Horizon Prévision (jours)", 7, 90, 30)
     st.divider()
-    st.markdown("**📊 Fichiers Requis:**")
+    st.markdown("**📊 Fichiers:**")
     st.markdown("- `conso.xlsx`: date, code_mp, qte_consommee_kg")
     st.markdown("- `param.xlsx`: code_mp, designation, cout_unitaire, stock_secu_actuel, moq_kg, lead_time_j")
 
@@ -32,11 +31,7 @@ if fichier_conso and fichier_param:
     df_conso = pd.read_excel(fichier_conso)
     df_param = pd.read_excel(fichier_param)
 
-    st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes conso, {len(df_param)} matières")
-
-    with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
-        st.write("**Colonnes Conso:**", df_conso.columns.tolist())
-        st.write("**Colonnes Param:**", df_param.columns.tolist())
+    st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes, {len(df_param)} matières")
 
     col_code_mp = 'code_mp'
     col_designation = 'designation'
@@ -50,11 +45,11 @@ if fichier_conso and fichier_param:
     required_cols = [col_code_mp, col_designation, col_stock, col_prix, col_moq, col_lead]
     missing = [c for c in required_cols if c not in df_param.columns]
     if missing:
-        st.error(f"❌ Colonnes manquantes f param.xlsx: {', '.join(missing)}")
+        st.error(f"❌ Colonnes manquantes: {', '.join(missing)}")
         st.stop()
 
-    if st.button("🚀 Générer Plan Appro + Dashboard IA", type="primary", use_container_width=True):
-        with st.spinner("⏳ Calcul IA + Génération Dashboard..."):
+    if st.button("🚀 Générer Plan + Dashboard IA", type="primary", use_container_width=True):
+        with st.spinner("⏳ Calcul IA + Analyse Stratégique..."):
             liste_mp = df_param[col_code_mp].unique()
             resultats_globaux = []
             forecasts_dict = {}
@@ -91,14 +86,18 @@ if fichier_conso and fichier_param:
                     if couverture_jours < lead_time:
                         status = "🔴 URGENT - Risque Rupture"
                         urgence = 3
+                        risque = "CRITIQUE"
                     elif couverture_jours < lead_time + 7:
                         status = "🟠 Attention - Stock Faible"
                         urgence = 2
+                        risque = "MOYEN"
                     else:
                         status = "🟢 OK - Stock Suffisant"
                         urgence = 1
+                        risque = "FAIBLE"
 
                     date_commande = pd.Timestamp.now() + pd.Timedelta(days=max(0, int(couverture_jours - lead_time)))
+                    jours_retard = max(0, lead_time - couverture_jours)
 
                     resultats_globaux.append({
                         'Code_MP': code_mp,
@@ -112,7 +111,9 @@ if fichier_conso and fichier_param:
                         'Lead_Time_j': lead_time,
                         'Couverture_jours': round(couverture_jours, 1),
                         'Date_Commande_Suggeree': date_commande.strftime('%Y-%m-%d'),
+                        'Jours_Retard_Potentiel': round(jours_retard, 1),
                         'Status': status,
+                        'Risque': risque,
                         'Urgence': urgence
                     })
                 except Exception as e:
@@ -138,8 +139,8 @@ if fichier_conso and fichier_param:
                 nb_commander = len(df_plan[df_plan['QTE_A_COMMANDER_kg'] > 0])
 
                 col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR", delta=f"{nb_commander} MP")
-                col2.metric("🔴 Urgent", f"{nb_urgent}", delta="Risque rupture", delta_color="inverse")
-                col3.metric("🟠 Attention", f"{nb_attention}", delta="Stock faible", delta_color="off")
+                col2.metric("🔴 Critique", f"{nb_urgent}", delta="Action immédiate", delta_color="inverse")
+                col3.metric("🟠 Attention", f"{nb_attention}", delta="À surveiller", delta_color="off")
                 col4.metric("📦 À Commander", f"{nb_commander}/{len(df_plan)}", delta=f"{HORIZON_JOURS}j")
 
                 st.divider()
@@ -149,14 +150,14 @@ if fichier_conso and fichier_param:
                 if len(df_urgent) > 0:
                     for _, row in df_urgent.iterrows():
                         if row['Urgence'] == 3:
-                            st.error(f"🔴 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j < Lead Time {row['Lead_Time_j']:.0f}j | **COMMANDER {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT**")
+                            st.error(f"🔴 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j < Lead Time {row['Lead_Time_j']:.0f}j | **Retard potentiel: {row['Jours_Retard_Potentiel']:.0f}j** | COMMANDER {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT")
                         else:
-                            st.warning(f"🟠 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j | Suggéré: {row['QTE_A_COMMANDER_kg']:.0f}kg le {row['Date_Commande_Suggeree']}")
+                            st.warning(f"🟠 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j | Commander {row['QTE_A_COMMANDER_kg']:.0f}kg avant {row['Date_Commande_Suggeree']}")
                 else:
                     st.success("✅ Aucune alerte - Tous les stocks sont suffisants!")
 
                 st.divider()
-                st.subheader("📋 Plan d'Approvisionnement Détaillé")
+                st.subheader("📋 Plan d'Approvisionnement")
 
                 colf1, colf2 = st.columns(2)
                 with colf1:
@@ -173,13 +174,12 @@ if fichier_conso and fichier_param:
                 st.divider()
                 st.subheader("📈 Visualisations")
 
-                tab1, tab2, tab3 = st.tabs(["💰 Coûts par MP", "📦 Top 10 Quantités", "📊 Prévision Détaillée"])
+                tab1, tab2, tab3 = st.tabs(["💰 Coûts", "📦 Quantités", "📊 Prévision"])
 
                 with tab1:
                     df_chart = df_plan[df_plan['Cout_Commande_EUR'] > 0].nlargest(15, 'Cout_Commande_EUR')
                     fig = px.bar(df_chart, x='Code_MP', y='Cout_Commande_EUR', color='Status',
                                 title="Top 15 Coûts de Commande",
-                                labels={'Cout_Commande_EUR': 'Coût (EUR)', 'Code_MP': 'Matière'},
                                 color_discrete_map={'🔴 URGENT - Risque Rupture': '#ff4444',
                                                    '🟠 Attention - Stock Faible': '#ffaa00',
                                                    '🟢 OK - Stock Suffisant': '#44ff44'})
@@ -188,9 +188,7 @@ if fichier_conso and fichier_param:
                 with tab2:
                     df_top = df_plan.nlargest(10, 'QTE_A_COMMANDER_kg')
                     fig = px.bar(df_top, x='QTE_A_COMMANDER_kg', y='Designation', orientation='h',
-                                title="Top 10 Quantités à Commander",
-                                labels={'QTE_A_COMMANDER_kg': 'Quantité (kg)', 'Designation': 'Matière'},
-                                color='Urgence', color_continuous_scale='Reds')
+                                title="Top 10 Quantités à Commander", color='Urgence', color_continuous_scale='Reds')
                     st.plotly_chart(fig, use_container_width=True)
 
                 with tab3:
@@ -198,92 +196,8 @@ if fichier_conso and fichier_param:
                     if mp_select in forecasts_dict:
                         forecast = forecasts_dict[mp_select]
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Prévision', line=dict(color='#1f77b4')))
+                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Prévision'))
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines', line_color='rgba(0,0,0,0)', showlegend=False))
-                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines', line_color='rgba(0,0,0,0)', name='Intervalle Confiance'))
-                        fig.update_layout(title=f"Prévision Prophet - {mp_select}", xaxis_title="Date", yaxis_title="Quantité (kg)")
-                        st.plotly_chart(fig, use_container_width=True)
-
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
-                st.download_button("📥 Télécharger Plan Complet Excel", output.getvalue(),
-                                 f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                 use_container_width=True)
-            else:
-                st.error("❌ Makaynch résultats")
-
-if 'df_resultat' in st.session_state:
-    st.divider()
-    st.header("🤖 Assistant IA - Analyse Intelligente")
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Swel... Ex: Chkoun 3ndo risque rupture? Ch7al coût total?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            df = st.session_state['df_resultat']
-            cout = st.session_state.get('cout_total', 0)
-
-            prompt_lower = prompt.lower()
-
-            if "urgent" in prompt_lower or "rupture" in prompt_lower or "risque" in prompt_lower:
-                df_urgent = df[df['Urgence'] == 3]
-                if not df_urgent.empty:
-                    response = f"🔴 **MPs f risque rupture ({len(df_urgent)}):**\n\n"
-                    for _, row in df_urgent.iterrows():
-                        response += f"- **{row['Code_MP']}** ({row['Designation']}): Stock {row['Stock_Actuel_kg']:.0f}kg, Couverture {row['Couverture_jours']:.0f}j < Lead Time {row['Lead_Time_j']:.0f}j\n → **Commander {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT** 💥\n\n"
-                else:
-                    response = "✅ Ma kayn 7ta MP f risque rupture! Kolchi mazyan 💪"
-
-            elif "coût" in prompt_lower or "cout" in prompt_lower or "total" in prompt_lower or "budget" in prompt_lower:
-                nb_mp = len(df[df['QTE_A_COMMANDER_kg'] > 0])
-                response = f"💰 **Budget Total Matw9e3:** {cout:,.0f} EUR\n\n📦 **MP à Commander:** {nb_mp} matières\n📅 **Horizon:** {HORIZON_JOURS} jours\n\n**Top 3 Coûts:**\n"
-                top3 = df.nlargest(3, 'Cout_Commande_EUR')
-                for _, row in top3.iterrows():
-                    response += f"- {row['Code_MP']}: {row['Cout_Commande_EUR']:,.0f} EUR ({row['QTE_A_COMMANDER_kg']:.0f}kg)\n"
-
-            elif "akbar" in prompt_lower or "plus" in prompt_lower or "max" in prompt_lower:
-                max_row = df.loc[df['QTE_A_COMMANDER_kg'].idxmax()]
-                response = f"📦 **Akbar quantité à commander:**\n\n**{max_row['Code_MP']} - {max_row['Designation']}**\n- Quantité: **{max_row['QTE_A_COMMANDER_kg']:,.0f} kg**\n- Coût: {max_row['Cout_Commande_EUR']:,.0f} EUR\n- Status: {max_row['Status']}\n- Date Commande: {max_row['Date_Commande_Suggeree']}"
-
-            elif any(mp in prompt.upper() for mp in df['Code_MP'].tolist()):
-                for mp in df['Code_MP'].tolist():
-                    if mp in prompt.upper():
-                        row = df[df['Code_MP'] == mp].iloc[0]
-                        response = f"**{row['Code_MP']} - {row['Designation']}**\n\n"
-                        response += f"📊 Stock Actuel: {row['Stock_Actuel_kg']:.0f} kg\n"
-                        response += f"📈 Besoin Prévu: {row['Besoin_Prevu_kg']:.0f} kg ({HORIZON_JOURS}j)\n"
-                        response += f"📦 À Commander: **{row['QTE_A_COMMANDER_kg']:.0f} kg** (MOQ: {row['MOQ_kg']:.0f}kg)\n"
-                        response += f"💰 Coût: {row['Cout_Commande_EUR']:,.0f} EUR\n"
-                        response += f"⏰ Lead Time: {row['Lead_Time_j']:.0f} jours\n"
-                        response += f"📅 Couverture: {row['Couverture_jours']:.1f} jours\n"
-                        response += f"🎯 Status: {row['Status']}\n"
-                        response += f"📆 Date Commande Suggérée: {row['Date_Commande_Suggeree']}"
-                        break
-            else:
-                response = f"""**📊 Résumé Plan d'Appro:**
-
-💰 **Coût Total:** {cout:,.0f} EUR
-🔴 **Urgent:** {len(df[df['Urgence']==3])} MP
-🟠 **Attention:** {len(df[df['Urgence']==2])} MP
-📦 **À Commander:** {len(df[df['QTE_A_COMMANDER_kg']>0])} MP
-
-**Top 5 MP à commander:**
-{df[df['QTE_A_COMMANDER_kg']>0].nlargest(5, 'QTE_A_COMMANDER_kg')[['Code_MP', 'QTE_A_COMMANDER_kg', 'Status']].to_string(index=False)}
-
-**Swel 3la:** risque rupture, coût total, akbar quantité, wla smiya dyal MP"""
-
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-else:
-    st.info("👆 Uploadi l fichiers w click 'Générer Plan Appro + Dashboard IA' bach yt7ll lik kolchi")
+                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines', name='Intervalle Confiance'))
+                        fig.update_layout(title=f"Prévision Prophet - {mp_select}")
+                        st.plotly_chart(fig, use_container_width
