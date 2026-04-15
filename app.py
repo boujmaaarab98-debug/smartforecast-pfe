@@ -27,6 +27,7 @@ if fichier_conso and fichier_param:
         st.write("**Colonnes Conso:**", df_conso.columns.tolist())
         st.write("**Colonnes Param:**", df_param.columns.tolist())
 
+    # AUTO-DETECT - M9AD 3LA FICHIERS DYALK EXACTEMENT
     col_code_mp = None
     for col in ['code_mp', 'Code_MP', 'Code MP', 'CodeMP', 'Ref_MP', 'Ref', 'Code']:
         if col in df_param.columns:
@@ -40,13 +41,13 @@ if fichier_conso and fichier_param:
             break
 
     col_stock = None
-    for col in ['stock_actuel', 'Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock', 'Stock_Initial']:
+    for col in ['stock_secu_actuel', 'stock_actuel', 'Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock', 'Stock_Initial']:
         if col in df_param.columns:
             col_stock = col
             break
 
     col_prix = None
-    for col in ['prix_unitaire_eur', 'Prix_Unitaire_EUR', 'Prix', 'Prix_Unitaire', 'Cout', 'Prix_Unit']:
+    for col in ['cout_unitaire', 'cout unitaire', 'prix_unitaire_eur', 'Prix_Unitaire_EUR', 'Prix', 'Prix_Unitaire', 'Cout', 'Prix_Unit']:
         if col in df_param.columns:
             col_prix = col
             break
@@ -63,13 +64,14 @@ if fichier_conso and fichier_param:
             col_qte_conso = col
             break
 
+    # CHECK
     erreurs = []
     if not col_code_mp: erreurs.append("code_mp")
     if not col_date_conso: erreurs.append("date")
     if not col_qte_conso: erreurs.append("qte_consommee_kg")
-    if not col_stock: erreurs.append("stock_actuel")
-    if not col_prix: erreurs.append("prix_unitaire_eur")
+    if not col_prix: erreurs.append("cout_unitaire")
     if not col_designation: erreurs.append("designation")
+    if not col_stock: erreurs.append("stock_secu_actuel")
 
     if erreurs:
         st.error(f"❌ Ma l9itch had les colonnes: {', '.join(erreurs)}")
@@ -134,56 +136,4 @@ if fichier_conso and fichier_param:
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
                 st.download_button(
-                    label="📥 Télécharger Plan Appro Excel",
-                    data=output.getvalue(),
-                    file_name=f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.error("❌ Makaynch résultats")
-
-if 'df_resultat' in st.session_state:
-    st.divider()
-    st.header("🤖 Swel Chat IA 3la Stock Dyalk")
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Swel... Ex: Ch7al khassni n commander MP_PP?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            df = st.session_state['df_resultat']
-            cout = st.session_state.get('cout_total', 0)
-
-            if "MP_PP" in prompt.upper():
-                mp_pp = df[df['Code_MP'].str.contains('MP_PP', na=False, case=False)]
-                if not mp_pp.empty:
-                    qte = mp_pp['QTE_A_COMMANDER_kg'].values[0]
-                    response = f"**MP_PP - PP Noir:** Khassk t commander **{qte:,.0f} kg** 💪"
-                else:
-                    response = "MP_PP ma kaynach f plan d'appro had chhar ✅"
-            elif "coût" in prompt.lower() or "cout" in prompt.lower() or "total" in prompt.lower():
-                response = f"**Coût Total matw9e3:** {cout:,.0f} EUR l {HORIZON_JOURS} jours 📊"
-            elif "akbar" in prompt.lower():
-                max_row = df.loc[df['QTE_A_COMMANDER_kg'].idxmax()]
-                response = f"**Akbar quantité:** {max_row['Designation']} → **{max_row['QTE_A_COMMANDER_kg']:,.0f} kg**"
-            else:
-                response = f"""**Plan d'appro dyalk:**
-
-{df[['Code_MP', 'Designation', 'QTE_A_COMMANDER_kg']].head().to_string(index=False)}
-
-**Coût total:** {cout:,.0f} EUR
-
-Swel 3la chi matière b t7did!"""
-
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-else:
-    st.info("👆 Uploadi l fichiers w click 'Générer Plan Appro b IA' bach yt7ll lik Chat")
+                    label
