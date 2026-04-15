@@ -92,15 +92,15 @@ if file_conso and file_param:
                 progress_bar.progress((i + 1) / len(liste_mp))
 
             if resultats_globaux:
-                   df_plan = pd.DataFrame(resultats_globaux).sort_values('Cout_Commande_EUR', ascending=False)
+                      df_plan = pd.DataFrame(resultats_globaux).sort_values('Cout_Commande_EUR', ascending=False)
     total_cout = df_plan['Cout_Commande_EUR'].sum()
     st.session_state['df_resultat'] = df_plan
     st.session_state['cout_total'] = total_cout
     st.success(f"✅ Salina! Plan Appro jdid wajd")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR")
-                col2.metric("📦 MP à Commander", f"{len(df_plan[df_plan['QTE_A_COMMANDER_kg']>0])}")
-                col3.metric("📅 Horizon", f"{HORIZON_JOURS} jours")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR")
+    col2.metric("📦 MP à Commander", f"{len(df_plan[df_plan['QTE_A_COMMANDER_kg']>0])}")
+    col3.metric("📅 Horizon", f"{HORIZON_JOURS} jours")
 
                 st.dataframe(df_plan, use_container_width=True)
 
