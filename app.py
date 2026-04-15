@@ -23,54 +23,55 @@ if fichier_conso and fichier_param:
     
     st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes conso, {len(df_param)} matières")
     
-    # WERI LES COLONNES
     with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
         st.write("**Colonnes Conso:**", df_conso.columns.tolist())
         st.write("**Colonnes Param:**", df_param.columns.tolist())
     
-    # AUTO-DETECT COLONNES PARAM
+    # AUTO-DETECT COLONNES PARAM - M9AD 3LA FICHIERS DYALK
     col_code_mp = None
-    for col in ['Code_MP', 'Code MP', 'code_mp', 'CodeMP', 'Ref_MP', 'Ref', 'Code']:
+    for col in ['code_mp', 'Code_MP', 'Code MP', 'code_mp', 'CodeMP', 'Ref_MP', 'Ref', 'Code']:
         if col in df_param.columns:
             col_code_mp = col
             break
     
     col_designation = None
-    for col in ['Designation', 'Désignation', 'Nom', 'Libelle', 'Produit', 'Libellé']:
+    for col in ['designation', 'Designation', 'Désignation', 'Nom', 'Libelle', 'Produit', 'Libellé']:
         if col in df_param.columns:
             col_designation = col
             break
     
     col_stock = None
-    for col in ['Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock', 'Stock_Initial']:
+    for col in ['stock_actuel', 'Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock', 'Stock_Initial']:
         if col in df_param.columns:
             col_stock = col
             break
     
     col_prix = None
-    for col in ['Prix_Unitaire_EUR', 'Prix', 'Prix_Unitaire', 'Cout', 'Prix_Unit']:
+    for col in ['prix_unitaire_eur', 'Prix_Unitaire_EUR', 'Prix_Unitaire', 'Cout', 'Prix_Unit']:
         if col in df_param.columns:
             col_prix = col
             break
     
-    # AUTO-DETECT COLONNES CONSO
+    # AUTO-DETECT COLONNES CONSO - M9AD 3LA FICHIERS DYALK
     col_date_conso = None
-    for col in ['Date', 'date', 'Date_Consommation', 'Date_Conso', 'Jour']:
+    for col in ['date', 'Date', 'Date_Consommation', 'Date_Conso', 'Jour']:
         if col in df_conso.columns:
             col_date_conso = col
             break
     
     col_qte_conso = None
-    for col in ['Qte_Consommee', 'Qte_Consommée', 'Quantite', 'Qte', 'Consommation', 'Qte_Conso']:
+    for col in ['qte_consommee_kg', 'Qte_Consommee', 'Qte_Consommée', 'Quantite', 'Qte', 'Consommation', 'Qte_Conso']:
         if col in df_conso.columns:
             col_qte_conso = col
             break
     
     # CHECK ILA L9A LES COLONNES
     erreurs = []
-    if not col_code_mp: erreurs.append("Code_MP f param.xlsx")
-    if not col_date_conso: erreurs.append("Date f conso.xlsx")
-    if not col_qte_conso: erreurs.append("Qte_Consommee f conso.xlsx")
+    if not col_code_mp: erreurs.append("code_mp f param.xlsx")
+    if not col_date_conso: erreurs.append("date f conso.xlsx")
+    if not col_qte_conso: erreurs.append("qte_consommee_kg f conso.xlsx")
+    if not col_stock: erreurs.append("stock_actuel f param.xlsx")
+    if not col_prix: erreurs.append("prix_unitaire_eur f param.xlsx")
     
     if erreurs:
         st.error(f"❌ Ma l9itch had les colonnes: {', '.join(erreurs)}")
@@ -104,92 +105,4 @@ if fichier_conso and fichier_param:
                     qte_commander = max(0, besoin_total - stock_actuel)
                     prix = df_param[df_param[col_code_mp] == code_mp][col_prix].values[0]
                     cout = qte_commander * prix
-                    designation = df_param[df_param[col_code_mp] == code_mp][col_designation].values[0]
-                    
-                    resultats_globaux.append({
-                        'Code_MP': code_mp,
-                        'Designation': designation,
-                        'Stock_Actuel_kg': stock_actuel,
-                        'Besoin_Prevu_kg': besoin_total,
-                        'QTE_A_COMMANDER_kg': qte_commander,
-                        'Prix_Unitaire_EUR': prix,
-                        'Cout_Commande_EUR': cout
-                    })
-                except Exception as e:
-                    continue
-                
-                progress_bar.progress((i + 1) / len(liste_mp))
-            
-            if resultats_globaux:
-                df_plan = pd.DataFrame(resultats_globaux).sort_values('Cout_Commande_EUR', ascending=False)
-                total_cout = df_plan['Cout_Commande_EUR'].sum()
-                st.session_state['df_resultat'] = df_plan
-                st.session_state['cout_total'] = total_cout
-                st.success(f"✅ Salina! Plan Appro jdid wajd")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR")
-                col2.metric("📦 MP à Commander", f"{len(df_plan[df_plan['QTE_A_COMMANDER_kg']>0])}")
-                col3.metric("📅 Horizon", f"{HORIZON_JOURS} jours")
-                
-                st.dataframe(df_plan, use_container_width=True)
-                
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
-                st.download_button(
-                    label="📥 Télécharger Plan Appro Excel",
-                    data=output.getvalue(),
-                    file_name=f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.error("❌ Makaynch résultats - vérifi les fichiers dyalk")
-
-# ============================================
-# CHAT IA - KAYBAN GHIR MN B3D MA TGÉNÉRI L PLAN
-# ============================================
-if 'df_resultat' in st.session_state:
-    st.divider()
-    st.header("🤖 Swel Chat IA 3la Stock Dyalk")
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Swel... Ex: Ch7al khassni n commander MP_PP?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            df = st.session_state['df_resultat']
-            cout = st.session_state.get('cout_total', 0)
-            
-            if "MP_PP" in prompt.upper():
-                mp_pp = df[df['Code_MP'].str.contains('MP_PP', na=False, case=False)]
-                if not mp_pp.empty:
-                    qte = mp_pp['QTE_A_COMMANDER_kg'].values[0]
-                    response = f"**MP_PP - PP Noir:** Khassk t commander **{qte:,.0f} kg** 💪"
-                else:
-                    response = "MP_PP ma kaynach f plan d'appro had chhar ✅"
-            elif "coût" in prompt.lower() or "cout" in prompt.lower() or "total" in prompt.lower():
-                response = f"**Coût Total matw9e3:** {cout:,.0f} EUR l {HORIZON_JOURS} jours 📊"
-            elif "akbar" in prompt.lower():
-                max_row = df.loc[df['QTE_A_COMMANDER_kg'].idxmax()]
-                response = f"**Akbar quantité:** {max_row['Designation']} → **{max_row['QTE_A_COMMANDER_kg']:,.0f} kg**"
-            else:
-                response = f"""**Plan d'appro dyalk:**
-
-{df[['Code_MP', 'Designation', 'QTE_A_COMMANDER_kg']].head().to_string(index=False)}
-
-**Coût total:** {cout:,.0f} EUR
-
-Swel 3la chi matière b t7did!"""
-                
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-else:
-    st.info("👆 Uploadi l fichiers w click 'Générer Plan Appro b IA' bach yt7ll lik Chat")
+                    designation = df_param[df_param[col_code_mp] == code_mp][col_designation].values
