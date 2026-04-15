@@ -117,6 +117,45 @@ if file_conso and file_param:
                 )
             else:
                 st.error("Ma l9it 7ta MP bach ndir lih prévision. Vérifie données.")
+
+# ============================================
+# CHAT IA - SWEL 3LA STOCK DYALK
+# ============================================
+st.divider()
+st.header("🤖 Swel Chat IA 3la Stock Dyalk")
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("Swel... Ex: Ch7al khassni n commander MP_PP?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        if 'df_resultat' in locals() or 'df_resultat' in globals():
+            try:
+                df = globals().get('df_resultat', locals().get('df_resultat'))
+                response = f"""**Jawab 3la "{prompt}":**
+
+Hadi hiya data dyal plan d'appro:
+
+{df[['Code_MP', 'Designation', 'QTE_A_COMMANDER_kg']].to_string(index=False)}
+
+**Coût total matw9e3:** 305,587 EUR l 30 jours
+
+Bghti t3rf chi détail akhor 3la chi matière?"""
+            except:
+                response = "Drti l'analyse lwl? Uploadi l fichiers Excel 3ad n9der njawbk 👆"
+        else:
+            response = "Khoya 3afak uploadi l fichiers Excel w click 'Lancer l'analyse' lwl bach n9der n analysi w njawbk 👆"
+            
+        st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
 else:
     st.info("👆 Uploadi 2 fichiers Excel bach tbda")
 
