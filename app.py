@@ -23,39 +23,58 @@ if fichier_conso and fichier_param:
     
     st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes conso, {len(df_param)} matières")
     
-    # WERI LES COLONNES BACH T3REF CHNO FIH FICHIER DYALK
+    # WERI LES COLONNES
     with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
         st.write("**Colonnes Conso:**", df_conso.columns.tolist())
         st.write("**Colonnes Param:**", df_param.columns.tolist())
     
-    # AUTO-DETECT LES NOMS DYAL COLONNES
+    # AUTO-DETECT COLONNES PARAM
     col_code_mp = None
-    for col in ['Code_MP', 'Code MP', 'code_mp', 'CodeMP', 'Ref_MP', 'Ref']:
+    for col in ['Code_MP', 'Code MP', 'code_mp', 'CodeMP', 'Ref_MP', 'Ref', 'Code']:
         if col in df_param.columns:
             col_code_mp = col
             break
     
     col_designation = None
-    for col in ['Designation', 'Désignation', 'Nom', 'Libelle', 'Produit']:
+    for col in ['Designation', 'Désignation', 'Nom', 'Libelle', 'Produit', 'Libellé']:
         if col in df_param.columns:
             col_designation = col
             break
     
     col_stock = None
-    for col in ['Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock']:
+    for col in ['Stock_Actuel', 'Stock Actuel', 'Stock', 'Qte_Stock', 'Stock_Initial']:
         if col in df_param.columns:
             col_stock = col
             break
     
     col_prix = None
-    for col in ['Prix_Unitaire_EUR', 'Prix', 'Prix_Unitaire', 'Cout']:
+    for col in ['Prix_Unitaire_EUR', 'Prix', 'Prix_Unitaire', 'Cout', 'Prix_Unit']:
         if col in df_param.columns:
             col_prix = col
             break
     
+    # AUTO-DETECT COLONNES CONSO
+    col_date_conso = None
+    for col in ['Date', 'date', 'Date_Consommation', 'Date_Conso', 'Jour']:
+        if col in df_conso.columns:
+            col_date_conso = col
+            break
+    
+    col_qte_conso = None
+    for col in ['Qte_Consommee', 'Qte_Consommée', 'Quantite', 'Qte', 'Consommation', 'Qte_Conso']:
+        if col in df_conso.columns:
+            col_qte_conso = col
+            break
+    
     # CHECK ILA L9A LES COLONNES
-    if not col_code_mp:
-        st.error("❌ Ma l9itch colonne dyal Code MP f param.xlsx. Check smiyat les colonnes foug")
+    erreurs = []
+    if not col_code_mp: erreurs.append("Code_MP f param.xlsx")
+    if not col_date_conso: erreurs.append("Date f conso.xlsx")
+    if not col_qte_conso: erreurs.append("Qte_Consommee f conso.xlsx")
+    
+    if erreurs:
+        st.error(f"❌ Ma l9itch had les colonnes: {', '.join(erreurs)}")
+        st.info("👆 Chouf 'Vérifier les colonnes' foug bach t3ref smiyat s7a7")
         st.stop()
     
     if st.button("🚀 Générer Plan Appro b IA", type="primary"):
@@ -68,10 +87,13 @@ if fichier_conso and fichier_param:
             for i, code_mp in enumerate(liste_mp):
                 try:
                     df_mp = df_conso[df_conso[col_code_mp] == code_mp].copy()
-                    df_mp['Date'] = pd.to_datetime(df_mp['Date'])
-                    df_mp = df_mp.sort_values('Date')
+                    df_mp[col_date_conso] = pd.to_datetime(df_mp[col_date_conso])
+                    df_mp = df_mp.sort_values(col_date_conso)
                     
-                    df_prophet = df_mp.rename(columns={'Date': 'ds', 'Qte_Consommee': 'y'})
+                    if len(df_mp) < 2:
+                        continue
+                    
+                    df_prophet = df_mp.rename(columns={col_date_conso: 'ds', col_qte_conso: 'y'})
                     model = Prophet(daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=True)
                     model.fit(df_prophet)
                     future = model.make_future_dataframe(periods=HORIZON_JOURS)
@@ -94,7 +116,6 @@ if fichier_conso and fichier_param:
                         'Cout_Commande_EUR': cout
                     })
                 except Exception as e:
-                    st.warning(f"⚠️ {code_mp}: {str(e)}")
                     continue
                 
                 progress_bar.progress((i + 1) / len(liste_mp))
@@ -122,7 +143,7 @@ if fichier_conso and fichier_param:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
-                st.error("❌ Makaynch résultats")
+                st.error("❌ Makaynch résultats - vérifi les fichiers dyalk")
 
 # ============================================
 # CHAT IA - KAYBAN GHIR MN B3D MA TGÉNÉRI L PLAN
