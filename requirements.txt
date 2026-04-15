@@ -1,5 +1,6 @@
 streamlit
-prophet
 pandas
 numpy
+prophet
 openpyxl
+plotly
