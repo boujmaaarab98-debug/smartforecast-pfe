@@ -94,7 +94,7 @@ if file_conso and file_param:
             if resultats_globaux:
                 df_plan = pd.DataFrame(resultats_globaux).sort_values('Cout_Commande_EUR', ascending=False)
                 total_cout = df_plan['Cout_Commande_EUR'].sum()
-        st.session_state['df_resultat'] = df_plan
+                st.session_state['df_resultat'] = df_plan
         st.session_state['cout_total'] = total_cout
                 st.success(f"✅ Salina! Plan Appro jdid wajd")
                 col1, col2, col3 = st.columns(3)
