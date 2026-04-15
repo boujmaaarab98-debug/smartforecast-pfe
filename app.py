@@ -33,6 +33,10 @@ if fichier_conso and fichier_param:
 
     st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes, {len(df_param)} matières")
 
+    with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
+        st.write("**Colonnes Conso:**", df_conso.columns.tolist())
+        st.write("**Colonnes Param:**", df_param.columns.tolist())
+
     col_code_mp = 'code_mp'
     col_designation = 'designation'
     col_stock = 'stock_secu_actuel'
@@ -200,4 +204,185 @@ if fichier_conso and fichier_param:
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines', line_color='rgba(0,0,0,0)', showlegend=False))
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines', name='Intervalle Confiance'))
                         fig.update_layout(title=f"Prévision Prophet - {mp_select}")
-                        st.plotly_chart(fig, use_container_width
+                        st.plotly_chart(fig, use_container_width=True)
+
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
+                st.download_button("📥 Télécharger Plan Complet", output.getvalue(),
+                                 f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 use_container_width=True)
+
+if 'df_resultat' in st.session_state:
+    st.divider()
+    st.header("🧠 Consultant IA Stratégique - Plan d'Action")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": "👋 **Salam! Ana Consultant IA dyalk**\n\nN9der n3awnk f:\n- 🔍 **Analyse des risques** - Chkoun 3ndo risque rupture?\n- 💡 **Plans d'action** - Chno ndir f cas d'urgence?\n- 📊 **Simulation What-If** - Wila tzad stock? Wila t9l consumption?\n- 💰 **Optimisation coûts** - Kifach n9ll l budget?\n\n**Swel 3la ay mochkil w n3tik solution détaillée!**"
+        })
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("Swel... Ex: Chno ndir f cas rupture MP_PP? Wila retard fournisseur?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            df = st.session_state['df_resultat']
+            cout = st.session_state.get('cout_total', 0)
+            prompt_lower = prompt.lower()
+
+            if any(word in prompt_lower for word in ["rupture", "urgent", "critique", "risque"]):
+                df_critique = df[df['Urgence'] == 3]
+                if not df_critique.empty:
+                    response = f"🚨 **ANALYSE DE RISQUE - SITUATION CRITIQUE DÉTECTÉE**\n\n"
+                    response += f"**{len(df_critique)} matières en risque de rupture:**\n\n"
+
+                    for _, row in df_critique.iterrows():
+                        response += f"### 🔴 {row['Code_MP']} - {row['Designation']}\n"
+                        response += f"- **Stock Actuel:** {row['Stock_Actuel_kg']:.0f} kg\n"
+                        response += f"- **Couverture:** {row['Couverture_jours']:.1f} jours\n"
+                        response += f"- **Lead Time:** {row['Lead_Time_j']:.0f} jours\n"
+                        response += f"- **Retard Potentiel:** ⚠️ {row['Jours_Retard_Potentiel']:.0f} jours\n\n"
+                        response += f"**📋 PLAN D'ACTION IMMÉDIAT:**\n"
+                        response += f"1. **Action 1 - Commande Express:** Passer commande {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT (Coût: {row['Cout_Commande_EUR']:,.0f} EUR)\n"
+                        response += f"2. **Action 2 - Contacter Fournisseur:** Négocier réduction lead time wla livraison partielle urgente\n"
+                        response += f"3. **Action 3 - Stock Sécurité:** Vérifier si kayn stock de sécurité f autre site/entrepôt\n"
+                        response += f"4. **Action 4 - Alternative:** Chercher matière substitut wla fournisseur backup\n"
+                        response += f"5. **Action 5 - Production:** Ralentir consommation wla prioriser produits critiques\n\n"
+                        response += f"**⏰ Timeline:** Commande aujourd'hui → Livraison dans {row['Lead_Time_j']:.0f}j → Rupture évitée si action < {row['Couverture_jours']:.0f}j\n\n---\n\n"
+                else:
+                    response = "✅ **Bonne nouvelle!** Ma kayn 7ta MP f risque rupture critique daba.\n\nMais khllik vigilant 3la MPs f 🟠 Attention:\n"
+                    df_attention = df[df['Urgence'] == 2]
+                    for _, row in df_attention.iterrows():
+                        response += f"- {row['Code_MP']}: Commander avant {row['Date_Commande_Suggeree']}\n"
+
+            elif any(word in prompt_lower for word in ["retard", "fournisseur", "livraison", "délai"]):
+                response = f"⏰ **PLAN D'ACTION - RETARD FOURNISSEUR**\n\n"
+                response += f"**Situation:** Fournisseur retardé w stock ghadi ysali\n\n"
+                response += f"**📋 ACTIONS À PRENDRE:**\n\n"
+                response += f"**1. IMMÉDIAT (0-24h):**\n"
+                response += f" - Contacter fournisseur: confirmer nouvelle date livraison\n"
+                response += f" - Demander livraison partielle/split delivery\n"
+                response += f" - Activer clause pénalité retard f contrat\n\n"
+                response += f"**2. COURT TERME (1-7j):**\n"
+                response += f" - Chercher fournisseur backup/alternatif\n"
+                response += f" - Vérifier stock f autres sites du groupe\n"
+                response += f" - Négocier prêt/emprunt m3a concurrent\n\n"
+                response += f"**3. MOYEN TERME (1-4 semaines):**\n"
+                response += f" - Revoir planning production: prioriser produits\n"
+                response += f" - Augmenter stock sécurité l had MP\n"
+                response += f" - Diversifier fournisseurs (dual sourcing)\n\n"
+                response += f"**4. PRÉVENTION FUTURE:**\n"
+                response += f" - Mettre en place VMI (Vendor Managed Inventory)\n"
+                response += f" - Contrats cadre m3a pénalités claires\n"
+                response += f" - Système alerte précoce lead time\n\n"
+                response += f"**💡 CONSEIL:** Dima 3ndk Plan B w Plan C l MPs critiques!"
+
+            elif any(word in prompt_lower for word in ["coût", "cout", "budget", "cher", "économiser", "optimiser"]):
+                total = df['Cout_Commande_EUR'].sum()
+                top_cher = df.nlargest(5, 'Cout_Commande_EUR')
+                response = f"💰 **ANALYSE BUDGET & OPTIMISATION COÛTS**\n\n"
+                response += f"**Budget Total Prévu:** {total:,.0f} EUR\n\n"
+                response += f"**🔝 Top 5 MPs les plus chères:**\n"
+                for _, row in top_cher.iterrows():
+                    pct = (row['Cout_Commande_EUR']/total)*100
+                    response += f"- {row['Code_MP']}: {row['Cout_Commande_EUR']:,.0f} EUR ({pct:.1f}% du budget)\n"
+                response += f"\n**💡 STRATÉGIES D'OPTIMISATION:**\n\n"
+                response += f"**1. Négociation Volume:**\n"
+                response += f" - Grouper commandes → remise quantité 5-15%\n"
+                response += f" - Contrat annuel → prix bloqué\n\n"
+                response += f"**2. Optimisation MOQ:**\n"
+                response += f" - Vérifier si MOQ trop élevé → négocier baisse\n"
+                response += f" - Mutualiser commandes m3a autres sites\n\n"
+                response += f"**3. Substitution:**\n"
+                response += f" - Chercher matière alternative moins chère\n"
+                response += f" - Analyser coût total (prix + transport + stockage)\n\n"
+                response += f"**4. Gestion Stock:**\n"
+                response += f" - Réduire stock sécurité si risque faible → -10% coût\n"
+                response += f" - Juste-à-temps l MPs non-critiques\n\n"
+                response += f"**🎯 Économie Potentielle Estimée:** {total*0.08:,.0f} - {total*0.15:,.0f} EUR (8-15%)"
+
+            elif any(word in prompt_lower for word in ["simulation", "what-if", "si", "wila"]):
+                response = f"🔮 **SIMULATION WHAT-IF - Scénarios**\n\n"
+                response += f"**Scénario 1: Wila Zedna Stock Sécurité +20%**\n"
+                nouveau_cout = cout * 1.2
+                response += f" - Nouveau budget: {nouveau_cout:,.0f} EUR (+{nouveau_cout-cout:,.0f})\n"
+                response += f" - Avantage: Couverture +{HORIZON_JOURS*0.2:.0f} jours, risque rupture ↓80%\n"
+                response += f" - Inconvénient: Immobilisation trésorerie\n\n"
+                response += f"**Scénario 2: Wila N9ssna Consommation -15%**\n"
+                economie = cout * 0.15
+                response += f" - Économie: {economie:,.0f} EUR\n"
+                response += f" - Impact: Couverture +{(HORIZON_JOURS*0.15):.0f} jours\n"
+                response += f" - Action: Optimiser process, réduire rebuts\n\n"
+                response += f"**Scénario 3: Wila Fournisseur Zed Lead Time +5j**\n"
+                response += f" - MPs supplémentaires en risque: ~{len(df[df['Couverture_jours'] < df['Lead_Time_j'] + 5])}\n"
+                response += f" - Action: Commander plus tôt, augmenter stock sécurité\n\n"
+                response += f"**💡 Recommandation:** Simuler f Excel wla bghit simulation précise 3la MP spécifique, goul lia smiytha!"
+
+            elif any(mp in prompt.upper() for mp in df['Code_MP'].tolist()):
+                for mp in df['Code_MP'].tolist():
+                    if mp in prompt.upper():
+                        row = df[df['Code_MP'] == mp].iloc[0]
+                        response = f"**📊 ANALYSE COMPLÈTE - {row['Code_MP']}**\n\n"
+                        response += f"**{row['Designation']}**\n\n"
+                        response += f"**📈 Situation Actuelle:**\n"
+                        response += f"- Stock: {row['Stock_Actuel_kg']:.0f} kg\n"
+                        response += f"- Besoin {HORIZON_JOURS}j: {row['Besoin_Prevu_kg']:.0f} kg\n"
+                        response += f"- Couverture: {row['Couverture_jours']:.1f} jours\n"
+                        response += f"- Status: {row['Status']}\n"
+                        response += f"- Niveau Risque: {row['Risque']}\n\n"
+                        response += f"**📦 Recommandation Commande:**\n"
+                        response += f"- Quantité: **{row['QTE_A_COMMANDER_kg']:.0f} kg** (MOQ: {row['MOQ_kg']:.0f}kg)\n"
+                        response += f"- Coût: {row['Cout_Commande_EUR']:,.0f} EUR\n"
+                        response += f"- Date Suggérée: {row['Date_Commande_Suggeree']}\n"
+                        response += f"- Lead Time: {row['Lead_Time_j']:.0f} jours\n\n"
+
+                        if row['Urgence'] == 3:
+                            response += f"**🚨 PLAN D'ACTION CRITIQUE:**\n"
+                            response += f"1. Commander MAINTENANT - Retard {row['Jours_Retard_Potentiel']:.0f}j si non\n"
+                            response += f"2. Appeler fournisseur: urgence, livraison express\n"
+                            response += f"3. Alerter Production: risque arrêt ligne\n"
+                            response += f"4. Chercher stock urgence/alternative\n"
+                        elif row['Urgence'] == 2:
+                            response += f"**⚠️ PLAN D'ACTION PRÉVENTIF:**\n"
+                            response += f"1. Planifier commande avant {row['Date_Commande_Suggeree']}\n"
+                            response += f"2. Confirmer disponibilité fournisseur\n"
+                            response += f"3. Surveiller consommation quotidienne\n"
+                        else:
+                            response += f"**✅ SITUATION SAINE:**\n"
+                            response += f"- Stock suffisant l {row['Couverture_jours']:.0f} jours\n"
+                            response += f"- Pas d'action urgente requise\n"
+                            response += f"- Prochaine commande: {row['Date_Commande_Suggeree']}"
+                        break
+            else:
+                response = f"""**🧠 CONSULTANT IA - Résumé Exécutif**
+
+**📊 État Global:**
+- 💰 Budget: {cout:,.0f} EUR
+- 🔴 Critique: {len(df[df['Urgence']==3])} MP (Action immédiate)
+- 🟠 Attention: {len(df[df['Urgence']==2])} MP (À surveiller)
+- 🟢 OK: {len(df[df['Urgence']==1])} MP
+
+**🎯 Top 3 Priorités:**
+{df.nlargest(3, 'Urgence')[['Code_MP', 'Designation', 'Status']].to_string(index=False)}
+
+**💡 Questions Suggérées:**
+- "Chno ndir f cas rupture?"
+- "Kifach n9ll l budget?"
+- "Simulation wila retard fournisseur"
+- "Analyse [Code_MP]"
+
+**Swel 3la ay mochkil w n3tik plan d'action détaillé!**"""
+
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+else:
+    st.info("👆 Uploadi l fichiers w click 'Générer Plan' bach yt7ll lik Consultant IA")
