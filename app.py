@@ -5,7 +5,7 @@ from prophet import Prophet
 import io
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 st.set_page_config(page_title="Smart Forecast Pro", layout="wide", page_icon="🚀")
 
@@ -14,7 +14,6 @@ st.markdown("### Prophet AI + Alertes Intelligentes + Dashboard Pro")
 
 HORIZON_JOURS = 30
 
-# SIDEBAR - SETTINGS
 with st.sidebar:
     st.header("⚙️ Paramètres")
     HORIZON_JOURS = st.slider("Horizon Prévision (jours)", 7, 90, 30)
@@ -35,7 +34,10 @@ if fichier_conso and fichier_param:
 
     st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes conso, {len(df_param)} matières")
 
-    # AUTO-DETECT COLONNES
+    with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
+        st.write("**Colonnes Conso:**", df_conso.columns.tolist())
+        st.write("**Colonnes Param:**", df_param.columns.tolist())
+
     col_code_mp = 'code_mp'
     col_designation = 'designation'
     col_stock = 'stock_secu_actuel'
@@ -45,7 +47,6 @@ if fichier_conso and fichier_param:
     col_date_conso = 'date'
     col_qte_conso = 'qte_consommee_kg'
 
-    # CHECK
     required_cols = [col_code_mp, col_designation, col_stock, col_prix, col_moq, col_lead]
     missing = [c for c in required_cols if c not in df_param.columns]
     if missing:
@@ -83,11 +84,9 @@ if fichier_conso and fichier_param:
                     lead_time = df_param[df_param[col_code_mp] == code_mp][col_lead].values[0]
                     designation = df_param[df_param[col_code_mp] == code_mp][col_designation].values[0]
 
-                    # LOGIQUE MOQ + ALERTES
                     besoin_net = max(0, besoin_total - stock_actuel)
                     qte_commander = np.ceil(besoin_net / moq) * moq if besoin_net > 0 else 0
 
-                    # STATUS + URGENCE
                     couverture_jours = stock_actuel / (besoin_total / HORIZON_JOURS) if besoin_total > 0 else 999
                     if couverture_jours < lead_time:
                         status = "🔴 URGENT - Risque Rupture"
@@ -99,7 +98,7 @@ if fichier_conso and fichier_param:
                         status = "🟢 OK - Stock Suffisant"
                         urgence = 1
 
-                    date_commande = datetime.now() + timedelta(days=max(0, int(couverture_jours - lead_time)))
+                    date_commande = pd.Timestamp.now() + pd.Timedelta(days=max(0, int(couverture_jours - lead_time)))
 
                     resultats_globaux.append({
                         'Code_MP': code_mp,
@@ -129,7 +128,6 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Dashboard Généré! {len(df_plan)} matières analysées")
 
-                # ========== DASHBOARD KPIs ==========
                 st.divider()
                 st.subheader("📊 Dashboard KPIs")
 
@@ -144,7 +142,6 @@ if fichier_conso and fichier_param:
                 col3.metric("🟠 Attention", f"{nb_attention}", delta="Stock faible", delta_color="off")
                 col4.metric("📦 À Commander", f"{nb_commander}/{len(df_plan)}", delta=f"{HORIZON_JOURS}j")
 
-                # ========== ALERTES ==========
                 st.divider()
                 st.subheader("⚠️ Alertes Critiques")
 
@@ -158,11 +155,9 @@ if fichier_conso and fichier_param:
                 else:
                     st.success("✅ Aucune alerte - Tous les stocks sont suffisants!")
 
-                # ========== TABLEAU INTERACTIF ==========
                 st.divider()
                 st.subheader("📋 Plan d'Approvisionnement Détaillé")
 
-                # Filtres
                 colf1, colf2 = st.columns(2)
                 with colf1:
                     filtre_status = st.multiselect("Filtrer par Status", df_plan['Status'].unique(), default=df_plan['Status'].unique())
@@ -175,7 +170,6 @@ if fichier_conso and fichier_param:
 
                 st.dataframe(df_display.drop('Urgence', axis=1), use_container_width=True, height=400)
 
-                # ========== GRAPHIQUES ==========
                 st.divider()
                 st.subheader("📈 Visualisations")
 
@@ -207,22 +201,19 @@ if fichier_conso and fichier_param:
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Prévision', line=dict(color='#1f77b4')))
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines', line_color='rgba(0,0,0,0)', showlegend=False))
                         fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines', line_color='rgba(0,0,0,0)', name='Intervalle Confiance'))
-                        fig.add_vline(x=datetime.now(), line_dash="dash", line_color="red", annotation_text="Aujourd'hui")
                         fig.update_layout(title=f"Prévision Prophet - {mp_select}", xaxis_title="Date", yaxis_title="Quantité (kg)")
                         st.plotly_chart(fig, use_container_width=True)
 
-                # DOWNLOAD
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
                 st.download_button("📥 Télécharger Plan Complet Excel", output.getvalue(),
-                                 f"Plan_Appro_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                 f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
                                  mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                  use_container_width=True)
             else:
                 st.error("❌ Makaynch résultats")
 
-# CHAT IA AMÉLIORÉ
 if 'df_resultat' in st.session_state:
     st.divider()
     st.header("🤖 Assistant IA - Analyse Intelligente")
