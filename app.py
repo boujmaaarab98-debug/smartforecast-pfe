@@ -168,9 +168,16 @@ if fichier_conso and fichier_param:
                     ecart_mrp_prophet = besoin_mrp - besoin_prevu_prophet if besoin_mrp > 0 else 0
                     jours_rupture = len(df_mp[df_mp[col_qte_conso] > stock_actuel])
                     taux_rupture = (jours_rupture / len(df_mp) * 100) if len(df_mp) > 0 else 0
-                    rotation = conso_annuelle / stock_actuel if stock_actuel > 0 else 0
-                    # TAUX ROTATION EN % = Rotation × 100
-                    taux_rotation_pct = min(rotation * 100, 999)
+
+                    # ROTATION WA9I3IYA - MA CHI 999%
+                    if stock_actuel <= 1: # Stock 0 wla négligeable
+                        rotation = 0
+                        taux_rotation_pct = 0
+                    else:
+                        rotation = conso_annuelle / stock_actuel
+                        # Plafond 500% = 5x par an max (wa9i3i)
+                        taux_rotation_pct = min(rotation * 100, 500)
+
                     cout_possession = stock_actuel * prix_optimal * TAUX_POSSESSION_ANNUEL
 
                     if couverture_jours < lead_optimal:
@@ -203,7 +210,7 @@ if fichier_conso and fichier_param:
                         'Lead_Time_j': lead_optimal,
                         'Cout_Commande_EUR': round(qte_commander * prix_optimal, 2),
                         'Couverture_j': round(couverture_jours, 1),
-                        'Taux_Rotation_%': round(taux_rotation_pct, 1), # 👈 BDLNA HNA
+                        'Taux_Rotation_%': round(taux_rotation_pct, 1), # WA9I3IYA
                         'Taux_Rupture_%': round(taux_rupture, 1),
                         'Cout_Possession_EUR/an': round(cout_possession, 2),
                         'Date_Commande': date_commande.strftime('%Y-%m-%d'),
@@ -238,7 +245,7 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs - TAUX ROTATION
+                # DASHBOARD KPIs
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
@@ -248,7 +255,7 @@ if fichier_conso and fichier_param:
                 col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
 
                 col4, col5, col6 = st.columns(3)
-                col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%", help="Objectif: >200% = Excellent")
+                col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%", help="Objectif: >200% = Excellent, <100% = Stock dormant")
                 col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
                 col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
 
@@ -324,7 +331,7 @@ if fichier_conso and fichier_param:
                                          'Couverture (j)', 'Lead Time (j)', 'À COMMANDER (kg)']
                     st.dataframe(df_details, use_container_width=True, hide_index=True)
 
-                # TABLEAU - TAUX ROTATION %
+                # TABLEAU
                 st.divider()
                 st.subheader("📋 Plan Appro + Comparaison MRP")
                 st.dataframe(df_plan.drop('Urgence', axis=1), use_container_width=True, height=400)
