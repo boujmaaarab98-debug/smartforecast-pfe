@@ -2,5 +2,7 @@ streamlit
 pandas
 numpy
 prophet
-openpyxl
 plotly
+openpyxl
+duckduckgo-search==6.1.5
+requests
