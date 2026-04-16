@@ -59,6 +59,14 @@ def trouver_colonne(df, noms_possibles):
                 return col
     return None
 
+def calculer_score_fournisseur(row):
+    score_prix = 10 - (row['prix_unitaire_eur'] / 10)
+    score_lead = 10 - (row['lead_time_j'] / 3)
+    score_fiab = row['fiabilite_%'] / 10
+    score_qual = row['note_qualite_5'] * 2
+    score_total = (score_prix * 0.4) + (score_lead * 0.3) + (score_fiab * 0.2) + (score_qual * 0.1)
+    return round(max(0, min(10, score_total)), 2)
+
 def determiner_statut_rotation(taux):
     if taux < 100:
         return "🔴 Stock Dormant", "danger"
@@ -281,11 +289,11 @@ if fichier_conso and fichier_param:
                 st.subheader("📋 Plan Appro + Comparaison MRP")
                 st.dataframe(df_plan.drop('Urgence', axis=1), use_container_width=True, height=400)
 
-                # GRAPHIQUES - BIN KOL LES MPs
+                # GRAPHIQUES - BIN KOL LES MPs 👑
                 st.divider()
                 st.subheader("📈 Analyses")
 
-                tab1, tab2, tab3 = st.tabs(["📊 MRP vs Prévision", "⚠️ Écarts", "🏭 Fournisseurs"])
+                tab1, tab2, tab3 = st.tabs(["📊 MRP vs Prévision", "⚠️ Écarts + Alignement", "🏭 Fournisseurs"])
 
                 with tab1:
                     df_comp = df_plan.head(15)
@@ -296,8 +304,46 @@ if fichier_conso and fichier_param:
                     st.plotly_chart(fig, use_container_width=True)
 
                 with tab2:
+                    # 👑 GRAPHIQUE JDID - STATUT ALIGNEMENT
+                    st.subheader("🎯 Statut Alignement MRP - Tous les MPs")
+                    df_align = df_plan.sort_values('Couverture_j', ascending=False)
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        name='Couverture Stock (jours)',
+                        x=df_align['Code_MP'],
+                        y=df_align['Couverture_j'],
+                        marker_color=df_align['Alignement_MRP'].map({
+                            "✅ ALIGNÉ": "#44ff44",
+                            "⚠️ RISQUE": "#ffaa00",
+                            "❌ NON ALIGNÉ": "#ff4444"
+                        }),
+                        text=df_align['Couverture_j'].round(0).astype(int).astype(str) + 'j',
+                        textposition='auto'
+                    ))
+                    fig.add_trace(go.Scatter(
+                        name='Lead Time Requis (j)',
+                        x=df_align['Code_MP'],
+                        y=df_align['Lead_Time_j'],
+                        mode='lines+markers',
+                        line=dict(color='black', width=3, dash='dash'),
+                        marker=dict(size=10, symbol='diamond')
+                    ))
+                    fig.update_layout(
+                        title="🎯 Couverture Stock vs Lead Time - Chkoun ALIGNÉ?",
+                        xaxis_title="Code MP",
+                        yaxis_title="Jours",
+                        height=450,
+                        legend=dict(x=0.7, y=1.1, orientation='h')
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.divider()
+
+                    # GRAPHIQUE ÉCARTS
+                    st.subheader("Écarts MRP vs Prévision (kg) - Tous les MPs")
                     df_ecart = df_plan.sort_values('Ecart_MRP_vs_Prevision', key=abs, ascending=False).head(15)
-                    fig = px.bar(df_ecart, x='Code_MP', y='Ecart_MRP_vs_Prevision', color='Alignement_MRP', title="Écarts MRP vs Prévision (kg) - Tous les MPs", color_discrete_map={"✅ ALIGNÉ": "#44ff44", "⚠️ RISQUE": "#ffaa00", "❌ NON ALIGNÉ": "#ff4444"}, text='Ecart_MRP_vs_Prevision')
+                    fig = px.bar(df_ecart, x='Code_MP', y='Ecart_MRP_vs_Prevision', color='Alignement_MRP', title="Écarts MRP vs Prévision (kg)", color_discrete_map={"✅ ALIGNÉ": "#44ff44", "⚠️ RISQUE": "#ffaa00", "❌ NON ALIGNÉ": "#ff4444"}, text='Ecart_MRP_vs_Prevision')
                     fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
                     fig.add_hline(y=0, line_dash="solid", line_color="gray", line_width=2)
                     fig.update_layout(xaxis_title="Code MP", yaxis_title="Écart (MRP - Prophet) kg", height=450)
@@ -321,7 +367,7 @@ if fichier_conso and fichier_param:
                     pd.DataFrame([kpis_globaux]).to_excel(writer, index=False, sheet_name='KPIs')
                 st.download_button("📥 Télécharger Rapport MRP vs Appro", output.getvalue(), f"Rapport_MRP_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
-# CHAT IA - BLA WEB SEARCH
+# CHAT IA
 if 'df_resultat' in st.session_state:
     st.divider()
 
