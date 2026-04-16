@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # ========================================
-# CONFIG - SHEET_ID DYALK RAH M7TOT
+# CONFIG - SHEET_ID DYALK
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
 
@@ -23,6 +23,10 @@ def trouver_colonne(df, noms_possibles):
             if nom.lower() in col.lower():
                 return col
     return None
+
+def to_numeric_safe(series):
+    """7wl colonne l number - ila ma 9drch dir NaN"""
+    return pd.to_numeric(series, errors='coerce')
 
 @st.cache_data(ttl=300)
 def charger_donnees_google():
@@ -41,7 +45,6 @@ def charger_donnees_google():
         1. **Partager** → General access → **Anyone with the link** → **Viewer** → Done
         2. Smiyat les onglets exact: **Param** **Conso** **MRP** **Fournisseurs**
         """)
-        # MHM: Khassna 4 dyal None, machi 2
         return None, None, None, None
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
@@ -56,20 +59,35 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
     col_mp_mrp = trouver_colonne(mrp, ['code_mp', 'Code_MP', 'Code', 'MP'])
     col_qte_mrp = trouver_colonne(mrp, ['qte_besoin_kg', 'Qte_Besoin', 'Besoin', 'Qte'])
 
-    # Vérifier que les colonnes existent
     if not all([col_date_conso, col_mp_conso, col_qte_conso]):
-        st.error("❌ Colonnes manquantes dans feuille 'Conso'. Vérifier: date, code_mp, qte_consommee_kg")
+        st.error("❌ Colonnes manquantes dans 'Conso'. Vérifier: date, code_mp, qte_consommee_kg")
         return pd.DataFrame()
 
     if not all([col_date_mrp, col_mp_mrp, col_qte_mrp]):
-        st.error("❌ Colonnes manquantes dans feuille 'MRP'. Vérifier: date_besoin, code_mp, qte_besoin_kg")
+        st.error("❌ Colonnes manquantes dans 'MRP'. Vérifier: date_besoin, code_mp, qte_besoin_kg")
         return pd.DataFrame()
 
     conso = conso.rename(columns={col_date_conso: 'Date', col_mp_conso: 'Code_MP', col_qte_conso: 'Qte_Consommee'})
     mrp = mrp.rename(columns={col_date_mrp: 'Date_Besoin', col_mp_mrp: 'Code_MP', col_qte_mrp: 'Qte_Besoin'})
 
+    # 🔥 MHM: 7WL KOLCHI L NUMÉRIQUE
     conso['Date'] = pd.to_datetime(conso['Date'], errors='coerce')
+    conso['Qte_Consommee'] = to_numeric_safe(conso['Qte_Consommee'])
+
     mrp['Date_Besoin'] = pd.to_datetime(mrp['Date_Besoin'], errors='coerce')
+    mrp['Qte_Besoin'] = to_numeric_safe(mrp['Qte_Besoin'])
+
+    # Param aussi
+    param['stock_secu_actuel'] = to_numeric_safe(param.get('stock_secu_actuel', 0))
+    param['lead_time_j'] = to_numeric_safe(param.get('lead_time_j', 14))
+    param['moq_kg'] = to_numeric_safe(param.get('moq_kg', 1000))
+    param['cout_unitaire'] = to_numeric_safe(param.get('cout_unitaire', 0))
+
+    # Fournisseurs
+    fournis['taux_service_%'] = to_numeric_safe(fournis.get('taux_service_%', 0))
+    fournis['fiabilite_%'] = to_numeric_safe(fournis.get('fiabilite_%', 0))
+    fournis['note_qualite_5'] = to_numeric_safe(fournis.get('note_qualite_5', 0))
+    fournis['lead_time_j'] = to_numeric_safe(fournis.get('lead_time_j', 14))
 
     resultats = []
 
@@ -81,6 +99,8 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
         # 1. Historique consommation
         hist = conso[conso['Code_MP'] == code].copy()
+        hist = hist.dropna(subset=['Date', 'Qte_Consommee'])
+
         if len(hist) < 10:
             continue
 
@@ -104,6 +124,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
         # 3. Besoin MRP
         besoin_mrp = mrp[mrp['Code_MP'] == code]['Qte_Besoin'].sum()
+        besoin_mrp = 0 if pd.isna(besoin_mrp) else besoin_mrp
 
         # 4. Calcul écart
         besoin_total = besoin_mrp + conso_prevue_30j
@@ -123,9 +144,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         fournis_mp = fournis[fournis['code_mp'] == code].copy()
         if len(fournis_mp) > 0:
             fournis_mp['score'] = (
-                fournis_mp['taux_service_%'] * 0.4 +
-                fournis_mp['fiabilite_%'] * 0.3 +
-                fournis_mp['note_qualite_5'] * 20 * 0.3
+                fournis_mp['taux_service_%'].fillna(0) * 0.4 +
+                fournis_mp['fiabilite_%'].fillna(0) * 0.3 +
+                fournis_mp['note_qualite_5'].fillna(0) * 20 * 0.3
             )
             best = fournis_mp.nlargest(1, 'score').iloc[0]
             fournisseur = best['nom_fournisseur']
@@ -144,7 +165,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
             'Statut': statut,
             'Action': action,
             'Fournisseur Recommandé': fournisseur,
-            'Délai': f"{delai}j"
+            'Délai': f"{delai:.0f}j" if not pd.isna(delai) else "N/A"
         })
 
     return pd.DataFrame(resultats)
