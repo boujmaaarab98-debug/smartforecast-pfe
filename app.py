@@ -217,10 +217,14 @@ if fichier_conso and fichier_param:
             if resultats_globaux:
                 df_plan = pd.DataFrame(resultats_globaux).sort_values('Urgence', ascending=False)
 
+                # Calcul Taux Rotation % = Rotation × 100
+                taux_rotation_pct = (df_plan['Rotation_x/an'].mean() * 100) if df_plan['Rotation_x/an'].mean() < 10 else min(df_plan['Rotation_x/an'].mean() * 100, 999)
+
                 kpis_globaux = {
                     'cout_total_commande': df_plan['Cout_Commande_EUR'].sum(),
                     'valeur_stock_total': (df_plan['Stock_Actuel_kg'] * df_plan['Prix_EUR']).sum(),
                     'rotation_moyenne': df_plan['Rotation_x/an'].mean(),
+                    'taux_rotation_pct': taux_rotation_pct,
                     'couverture_moyenne': df_plan['Couverture_j'].mean(),
                     'taux_service_global': 100 - df_plan['Taux_Rupture_%'].mean(),
                     'cout_total_possession': df_plan['Cout_Possession_EUR/an'].sum(),
@@ -236,26 +240,30 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs - 3 × 3
+                # DASHBOARD KPIs - ROTATION B TAUX %
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
+                # STR 1 - FINANCIER
                 col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR")
-                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR")
-                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an")
+                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR", help="Total à commander maintenant")
+                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR", help="Stock immobilisé actuellement")
+                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
 
+                # STR 2 - PERFORMANCE STOCK
                 col4, col5, col6 = st.columns(3)
-                col4.metric("🔄 Rotation Moyenne", f"{kpis_globaux['rotation_moyenne']:.1f}x/an")
-                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours")
-                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%")
+                col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%", help="Objectif: >200% = Excellent")
+                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
+                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
 
+                # STR 3 - RISQUES & ALIGNEMENT
                 col7, col8, col9 = st.columns(3)
-                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", delta_color="inverse")
-                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", delta_color="inverse")
+                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture", delta_color="inverse")
+                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="Risque arrêt production", delta_color="inverse")
                 col9.metric("🎯 Aligné MRP", f"{kpis_globaux['taux_alignement_mrp']:.0f}%",
                            delta=f"{kpis_globaux['nb_non_alignes']} non alignés" if kpis_globaux['nb_non_alignes'] > 0 else "✓ Parfait",
-                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal")
+                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
+                           help="Alignement avec Production")
 
                 # ALERTES
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
@@ -325,33 +333,28 @@ if fichier_conso and fichier_param:
         st.rerun()
 
 # ============================================
-# CHAT IA M3A BOUTON EFFACER - KAY MSA7 GHIR CHAT
+# CHAT IA - BOUTON KAY MSA7 GHIR CHAT
 # ============================================
 if 'df_resultat' in st.session_state:
     st.divider()
 
-    # TITRE + BOUTON EFFACER CHAT BOHDO
     col_chat_title, col_clear_btn = st.columns([4, 1])
     with col_chat_title:
         st.header("🧠 Assistant MRP ↔ Appro")
     with col_clear_btn:
         if st.button("🗑️ Effacer Chat", use_container_width=True, type="secondary"):
-            st.session_state['messages'] = [] # 👈 MSA7 GHIR CHAT
-            # Ma ndirouch st.rerun() bach ma n-reset-iwch data
+            st.session_state['messages'] = [] # Msa7 ghir chat
 
-    # Message bienvenue ila l chat khawi
     if len(st.session_state['messages']) == 0:
         st.session_state['messages'].append({
             "role": "assistant",
             "content": "👋 **Salam!** N9der n3awnk f:\n- 📊 **Alignement MRP** - Wach 7na à jour m3a Production?\n- ⚠️ **Écarts** - Far9 bin MRP w Prévision\n- 🔴 **Critiques** - MPs li ghadi ywe99fou Production\n- 💡 **Actions** - Chno ncommandiw daba\n\n**Swel!**"
         })
 
-    # Afficher messages
     for message in st.session_state['messages']:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Input dyal chat
     if prompt := st.chat_input("Swel... Ex: Wach 7na à jour m3a MRP?"):
         st.session_state['messages'].append({"role": "user", "content": prompt})
         with st.chat_message("user"):
