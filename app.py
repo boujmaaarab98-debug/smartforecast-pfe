@@ -5,37 +5,70 @@ from prophet import Prophet
 import io
 import plotly.express as px
 import plotly.graph_objects as go
+from datetime import datetime
 
 st.set_page_config(page_title="Smart Forecast Pro", layout="wide", page_icon="🚀")
 
-st.title("🚀 Smart Forecast Pro - Assistant IA Supply Chain")
-st.markdown("### Prophet AI + Alertes + Consultant Stratégique IA")
+st.title("🚀 Smart Forecast Pro - Supply Chain Complet")
+st.markdown("### Plan Appro + KPIs Fournisseurs + Consultant IA")
 
 HORIZON_JOURS = 30
 
+# SESSION STATE
+if 'historique_plans' not in st.session_state:
+    st.session_state['historique_plans'] = []
+if 'fichiers_additionnels' not in st.session_state:
+    st.session_state['fichiers_additionnels'] = {}
+
+# SIDEBAR
 with st.sidebar:
-    st.header("⚙️ Paramètres")
-    HORIZON_JOURS = st.slider("Horizon Prévision (jours)", 7, 90, 30)
+    st.header("📁 Fichiers")
+
+    with st.expander("⚙️ Principaux", expanded=True):
+        fichier_conso = st.file_uploader("📊 Consommation", type=['xlsx'], key="conso")
+        fichier_param = st.file_uploader("⚙️ Paramètres MP", type=['xlsx'], key="param")
+
+    with st.expander("🏭 Fournisseurs & Autres"):
+        fichier_fournisseur = st.file_uploader("🏭 Fichier Fournisseurs", type=['xlsx'], key="fournisseur")
+        fichier_historique = st.file_uploader("📜 Historique Commandes", type=['xlsx'], key="hist")
+
+        if fichier_fournisseur:
+            df_fournisseur = pd.read_excel(fichier_fournisseur)
+            st.session_state['fichiers_additionnels']['fournisseurs'] = df_fournisseur
+            st.success(f"✅ {len(df_fournisseur['code_fournisseur'].unique())} fournisseurs")
+
+        if fichier_historique:
+            df_hist = pd.read_excel(fichier_historique)
+            st.session_state['fichiers_additionnels']['historique'] = df_hist
+            st.success(f"✅ {len(df_hist)} commandes historiques")
+
     st.divider()
-    st.markdown("**📊 Fichiers:**")
-    st.markdown("- `conso.xlsx`: date, code_mp, qte_consommee_kg")
-    st.markdown("- `param.xlsx`: code_mp, designation, cout_unitaire, stock_secu_actuel, moq_kg, lead_time_j")
+    HORIZON_JOURS = st.slider("Horizon (jours)", 7, 90, 30)
 
-col1, col2 = st.columns(2)
-with col1:
-    fichier_conso = st.file_uploader("📊 Upload Consommation", type=['xlsx'])
-with col2:
-    fichier_param = st.file_uploader("⚙️ Upload Paramètres", type=['xlsx'])
+    # HISTORIQUE
+    st.divider()
+    st.header("💾 Historique Plans")
+    if st.session_state['historique_plans']:
+        for idx, plan in enumerate(st.session_state['historique_plans'][:5]):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                if st.button(f"📄 {plan['date']}", key=f"load_{idx}", use_container_width=True):
+                    st.session_state['df_resultat'] = plan['data']
+                    st.session_state['cout_total'] = plan['cout_total']
+                    st.rerun()
+            with col2:
+                if st.button("🗑️", key=f"del_{idx}"):
+                    st.session_state['historique_plans'].pop(idx)
+                    st.rerun()
+    else:
+        st.info("Aucun plan sauvegardé")
 
+# MAIN
 if fichier_conso and fichier_param:
     df_conso = pd.read_excel(fichier_conso)
     df_param = pd.read_excel(fichier_param)
 
     st.success(f"✅ Fichiers chargés: {len(df_conso)} lignes, {len(df_param)} matières")
-
-    with st.expander("🔍 Vérifier les colonnes de tes fichiers"):
-        st.write("**Colonnes Conso:**", df_conso.columns.tolist())
-        st.write("**Colonnes Param:**", df_param.columns.tolist())
 
     col_code_mp = 'code_mp'
     col_designation = 'designation'
@@ -52,12 +85,21 @@ if fichier_conso and fichier_param:
         st.error(f"❌ Colonnes manquantes: {', '.join(missing)}")
         st.stop()
 
-    if st.button("🚀 Générer Plan + Dashboard IA", type="primary", use_container_width=True):
-        with st.spinner("⏳ Calcul IA + Analyse Stratégique..."):
+    col_btn1, col_btn2 = st.columns([3, 1])
+    with col_btn1:
+        generate = st.button("🚀 Générer Plan Complet", type="primary", use_container_width=True)
+    with col_btn2:
+        save_plan = st.button("💾 Sauvegarder", use_container_width=True, disabled='df_resultat' not in st.session_state)
+
+    if generate:
+        with st.spinner("⏳ Calcul IA + KPIs Fournisseurs..."):
             liste_mp = df_param[col_code_mp].unique()
             resultats_globaux = []
             forecasts_dict = {}
             progress_bar = st.progress(0)
+
+            # CHARGER FOURNISSEURS SI KAYN
+            df_fournisseurs = st.session_state['fichiers_additionnels'].get('fournisseurs', None)
 
             for i, code_mp in enumerate(liste_mp):
                 try:
@@ -78,30 +120,49 @@ if fichier_conso and fichier_param:
 
                     besoin_total = forecast['yhat'].tail(HORIZON_JOURS).sum()
                     stock_actuel = df_param[df_param[col_code_mp] == code_mp][col_stock].values[0]
-                    prix = df_param[df_param[col_code_mp] == code_mp][col_prix].values[0]
-                    moq = df_param[df_param[col_code_mp] == code_mp][col_moq].values[0]
-                    lead_time = df_param[df_param[col_code_mp] == code_mp][col_lead].values[0]
+                    prix_param = df_param[df_param[col_code_mp] == code_mp][col_prix].values[0]
+                    moq_param = df_param[df_param[col_code_mp] == code_mp][col_moq].values[0]
+                    lead_param = df_param[df_param[col_code_mp] == code_mp][col_lead].values[0]
                     designation = df_param[df_param[col_code_mp] == code_mp][col_designation].values[0]
 
+                    # FOURNISSEUR OPTIMAL SI FICHIER KAYN
+                    fournisseur_recommande = "N/A"
+                    prix_optimal = prix_param
+                    lead_optimal = lead_param
+                    score_fournisseur = 0
+
+                    if df_fournisseurs is not None:
+                        df_f_mp = df_fournisseurs[df_fournisseurs['code_mp'] == code_mp].copy()
+                        if not df_f_mp.empty:
+                            # Score: (fiabilite * 0.4) + (taux_service * 0.3) + (qualite * 20 * 0.2) + (100-prix_rel * 0.1)
+                            prix_min = df_f_mp['prix_unitaire_eur'].min()
+                            df_f_mp['score'] = (
+                                df_f_mp['fiabilite_%'] * 0.4 +
+                                df_f_mp['taux_service_%'] * 0.3 +
+                                df_f_mp['note_qualite_5'] * 20 * 0.2 +
+                                (100 - (df_f_mp['prix_unitaire_eur'] / prix_min * 100 - 100)) * 0.1
+                            )
+                            best_f = df_f_mp.loc[df_f_mp['score'].idxmax()]
+                            fournisseur_recommande = f"{best_f['nom_fournisseur']} ({best_f['code_fournisseur']})"
+                            prix_optimal = best_f['prix_unitaire_eur']
+                            lead_optimal = best_f['lead_time_j']
+                            score_fournisseur = best_f['score']
+
                     besoin_net = max(0, besoin_total - stock_actuel)
-                    qte_commander = np.ceil(besoin_net / moq) * moq if besoin_net > 0 else 0
+                    qte_commander = np.ceil(besoin_net / moq_param) * moq_param if besoin_net > 0 else 0
 
                     couverture_jours = stock_actuel / (besoin_total / HORIZON_JOURS) if besoin_total > 0 else 999
-                    if couverture_jours < lead_time:
-                        status = "🔴 URGENT - Risque Rupture"
+                    if couverture_jours < lead_optimal:
+                        status = "🔴 URGENT"
                         urgence = 3
-                        risque = "CRITIQUE"
-                    elif couverture_jours < lead_time + 7:
-                        status = "🟠 Attention - Stock Faible"
+                    elif couverture_jours < lead_optimal + 7:
+                        status = "🟠 Attention"
                         urgence = 2
-                        risque = "MOYEN"
                     else:
-                        status = "🟢 OK - Stock Suffisant"
+                        status = "🟢 OK"
                         urgence = 1
-                        risque = "FAIBLE"
 
-                    date_commande = pd.Timestamp.now() + pd.Timedelta(days=max(0, int(couverture_jours - lead_time)))
-                    jours_retard = max(0, lead_time - couverture_jours)
+                    date_commande = pd.Timestamp.now() + pd.Timedelta(days=max(0, int(couverture_jours - lead_optimal)))
 
                     resultats_globaux.append({
                         'Code_MP': code_mp,
@@ -109,15 +170,14 @@ if fichier_conso and fichier_param:
                         'Stock_Actuel_kg': stock_actuel,
                         'Besoin_Prevu_kg': round(besoin_total, 1),
                         'QTE_A_COMMANDER_kg': qte_commander,
-                        'MOQ_kg': moq,
-                        'Prix_Unitaire_EUR': prix,
-                        'Cout_Commande_EUR': round(qte_commander * prix, 2),
-                        'Lead_Time_j': lead_time,
+                        'Fournisseur_Recommande': fournisseur_recommande,
+                        'Prix_Optimal_EUR': round(prix_optimal, 2),
+                        'Lead_Time_Optimal_j': lead_optimal,
+                        'Score_Fournisseur': round(score_fournisseur, 1),
+                        'Cout_Commande_EUR': round(qte_commander * prix_optimal, 2),
                         'Couverture_jours': round(couverture_jours, 1),
                         'Date_Commande_Suggeree': date_commande.strftime('%Y-%m-%d'),
-                        'Jours_Retard_Potentiel': round(jours_retard, 1),
                         'Status': status,
-                        'Risque': risque,
                         'Urgence': urgence
                     })
                 except Exception as e:
@@ -130,259 +190,190 @@ if fichier_conso and fichier_param:
                 st.session_state['df_resultat'] = df_plan
                 st.session_state['forecasts'] = forecasts_dict
                 st.session_state['cout_total'] = df_plan['Cout_Commande_EUR'].sum()
+                st.session_state['date_generation'] = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-                st.success(f"✅ Dashboard Généré! {len(df_plan)} matières analysées")
+                st.success(f"✅ Plan Généré! {len(df_plan)} matières")
 
+                # DASHBOARD
                 st.divider()
-                st.subheader("📊 Dashboard KPIs")
-
                 col1, col2, col3, col4 = st.columns(4)
                 total_cout = df_plan['Cout_Commande_EUR'].sum()
                 nb_urgent = len(df_plan[df_plan['Urgence'] == 3])
-                nb_attention = len(df_plan[df_plan['Urgence'] == 2])
-                nb_commander = len(df_plan[df_plan['QTE_A_COMMANDER_kg'] > 0])
+                nb_fournisseurs = df_plan['Fournisseur_Recommande'].nunique() if 'Fournisseur_Recommande' in df_plan else 0
+                economie = (df_plan['QTE_A_COMMANDER_kg'] * (df_param.set_index('code_mp')['cout_unitaire'] - df_plan.set_index('Code_MP')['Prix_Optimal_EUR'])).sum()
 
-                col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR", delta=f"{nb_commander} MP")
-                col2.metric("🔴 Critique", f"{nb_urgent}", delta="Action immédiate", delta_color="inverse")
-                col3.metric("🟠 Attention", f"{nb_attention}", delta="À surveiller", delta_color="off")
-                col4.metric("📦 À Commander", f"{nb_commander}/{len(df_plan)}", delta=f"{HORIZON_JOURS}j")
+                col1.metric("💰 Coût Total", f"{total_cout:,.0f} EUR")
+                col2.metric("🔴 Critique", f"{nb_urgent}")
+                col3.metric("🏭 Fournisseurs", f"{nb_fournisseurs}")
+                col4.metric("💡 Économie", f"{economie:,.0f} EUR", delta="vs prix standard")
 
+                # TABLEAU
                 st.divider()
-                st.subheader("⚠️ Alertes Critiques")
+                st.subheader("📋 Plan + Fournisseurs Recommandés")
+                st.dataframe(df_plan.drop('Urgence', axis=1), use_container_width=True, height=400)
 
-                df_urgent = df_plan[df_plan['Urgence'] >= 2]
-                if len(df_urgent) > 0:
-                    for _, row in df_urgent.iterrows():
-                        if row['Urgence'] == 3:
-                            st.error(f"🔴 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j < Lead Time {row['Lead_Time_j']:.0f}j | **Retard potentiel: {row['Jours_Retard_Potentiel']:.0f}j** | COMMANDER {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT")
-                        else:
-                            st.warning(f"🟠 **{row['Code_MP']} - {row['Designation']}**: Stock {row['Stock_Actuel_kg']:.0f}kg | Couverture {row['Couverture_jours']:.0f}j | Commander {row['QTE_A_COMMANDER_kg']:.0f}kg avant {row['Date_Commande_Suggeree']}")
-                else:
-                    st.success("✅ Aucune alerte - Tous les stocks sont suffisants!")
+                # KPIs FOURNISSEURS
+                if df_fournisseurs is not None:
+                    st.divider()
+                    st.subheader("🏭 KPIs Fournisseurs")
 
-                st.divider()
-                st.subheader("📋 Plan d'Approvisionnement")
+                    tab1, tab2, tab3 = st.tabs(["📊 Performance", "💰 Comparaison Prix", "⭐ Top Fournisseurs"])
 
-                colf1, colf2 = st.columns(2)
-                with colf1:
-                    filtre_status = st.multiselect("Filtrer par Status", df_plan['Status'].unique(), default=df_plan['Status'].unique())
-                with colf2:
-                    show_only_order = st.checkbox("Afficher seulement MP à commander", value=False)
+                    with tab1:
+                        df_kpi = df_fournisseurs.groupby('nom_fournisseur').agg({
+                            'fiabilite_%': 'mean',
+                            'taux_service_%': 'mean',
+                            'note_qualite_5': 'mean',
+                            'lead_time_j': 'mean'
+                        }).round(1).reset_index()
+                        st.dataframe(df_kpi, use_container_width=True)
 
-                df_display = df_plan[df_plan['Status'].isin(filtre_status)]
-                if show_only_order:
-                    df_display = df_display[df_display['QTE_A_COMMANDER_kg'] > 0]
-
-                st.dataframe(df_display.drop('Urgence', axis=1), use_container_width=True, height=400)
-
-                st.divider()
-                st.subheader("📈 Visualisations")
-
-                tab1, tab2, tab3 = st.tabs(["💰 Coûts", "📦 Quantités", "📊 Prévision"])
-
-                with tab1:
-                    df_chart = df_plan[df_plan['Cout_Commande_EUR'] > 0].nlargest(15, 'Cout_Commande_EUR')
-                    fig = px.bar(df_chart, x='Code_MP', y='Cout_Commande_EUR', color='Status',
-                                title="Top 15 Coûts de Commande",
-                                color_discrete_map={'🔴 URGENT - Risque Rupture': '#ff4444',
-                                                   '🟠 Attention - Stock Faible': '#ffaa00',
-                                                   '🟢 OK - Stock Suffisant': '#44ff44'})
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with tab2:
-                    df_top = df_plan.nlargest(10, 'QTE_A_COMMANDER_kg')
-                    fig = px.bar(df_top, x='QTE_A_COMMANDER_kg', y='Designation', orientation='h',
-                                title="Top 10 Quantités à Commander", color='Urgence', color_continuous_scale='Reds')
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with tab3:
-                    mp_select = st.selectbox("Choisir MP pour voir prévision", df_plan['Code_MP'].tolist())
-                    if mp_select in forecasts_dict:
-                        forecast = forecasts_dict[mp_select]
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Prévision'))
-                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines', line_color='rgba(0,0,0,0)', showlegend=False))
-                        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines', name='Intervalle Confiance'))
-                        fig.update_layout(title=f"Prévision Prophet - {mp_select}")
+                        fig = px.bar(df_kpi, x='nom_fournisseur', y=['fiabilite_%', 'taux_service_%'],
+                                    barmode='group', title="Fiabilité & Taux de Service")
                         st.plotly_chart(fig, use_container_width=True)
 
+                    with tab2:
+                        fig = px.box(df_fournisseurs, x='code_mp', y='prix_unitaire_eur', color='nom_fournisseur',
+                                    title="Comparaison Prix par MP")
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with tab3:
+                        df_top_f = df_fournisseurs.groupby('nom_fournisseur').agg({
+                            'fiabilite_%': 'mean',
+                            'taux_service_%': 'mean',
+                            'note_qualite_5': 'mean'
+                        }).reset_index()
+                        df_top_f['Score_Global'] = (
+                            df_top_f['fiabilite_%'] * 0.4 +
+                            df_top_f['taux_service_%'] * 0.3 +
+                            df_top_f['note_qualite_5'] * 20 * 0.3
+                        ).round(1)
+                        df_top_f = df_top_f.sort_values('Score_Global', ascending=False)
+                        st.dataframe(df_top_f, use_container_width=True)
+
+                # GRAPHIQUES
+                st.divider()
+                mp_select = st.selectbox("Voir Prévision MP", df_plan['Code_MP'].tolist())
+                if mp_select in forecasts_dict:
+                    forecast = forecasts_dict[mp_select]
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Prévision'))
+                    fig.update_layout(title=f"Prévision - {mp_select}")
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # DOWNLOAD
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_plan.to_excel(writer, index=False, sheet_name='Plan_Appro')
+                    if df_fournisseurs is not None:
+                        df_fournisseurs.to_excel(writer, index=False, sheet_name='Fournisseurs')
                 st.download_button("📥 Télécharger Plan Complet", output.getvalue(),
-                                 f"Plan_Appro_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                                 f"Plan_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
                                  mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                  use_container_width=True)
 
+    if save_plan and 'df_resultat' in st.session_state:
+        nouveau_plan = {
+            'date': st.session_state['date_generation'],
+            'nb_mp': len(st.session_state['df_resultat']),
+            'cout_total': st.session_state['cout_total'],
+            'data': st.session_state['df_resultat']
+        }
+        st.session_state['historique_plans'].insert(0, nouveau_plan)
+        st.success(f"✅ Plan sauvegardé!")
+        st.rerun()
+
+# CHAT IA
 if 'df_resultat' in st.session_state:
     st.divider()
-    st.header("🧠 Consultant IA Stratégique - Plan d'Action")
+    st.header("🧠 Consultant IA - Fournisseurs & Actions")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
         st.session_state.messages.append({
             "role": "assistant",
-            "content": "👋 **Salam! Ana Consultant IA dyalk**\n\nN9der n3awnk f:\n- 🔍 **Analyse des risques** - Chkoun 3ndo risque rupture?\n- 💡 **Plans d'action** - Chno ndir f cas d'urgence?\n- 📊 **Simulation What-If** - Wila tzad stock? Wila t9l consumption?\n- 💰 **Optimisation coûts** - Kifach n9ll l budget?\n\n**Swel 3la ay mochkil w n3tik solution détaillée!**"
+            "content": "👋 **Salam!** N9der n3awnk f:\n- 🏭 **KPIs Fournisseurs** - Chkoun a7sen fournisseur?\n- 💰 **Comparaison prix** - Fin nl9a rkhis?\n- 🔍 **Analyse risques** - Rupture, retard\n- 💡 **Plans d'action** - Chno ndir?\n\n**Swel!**"
         })
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Swel... Ex: Chno ndir f cas rupture MP_PP? Wila retard fournisseur?"):
+    if prompt := st.chat_input("Swel... Ex: Chkoun a7sen fournisseur? Comparaison prix MP_PP?"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
             df = st.session_state['df_resultat']
-            cout = st.session_state.get('cout_total', 0)
+            df_fournisseurs = st.session_state['fichiers_additionnels'].get('fournisseurs', None)
             prompt_lower = prompt.lower()
 
-            if any(word in prompt_lower for word in ["rupture", "urgent", "critique", "risque"]):
+            if "fournisseur" in prompt_lower or "a7sen" in prompt_lower or "meilleur" in prompt_lower:
+                if df_fournisseurs is not None:
+                    df_top = df_fournisseurs.groupby('nom_fournisseur').agg({
+                        'fiabilite_%': 'mean',
+                        'taux_service_%': 'mean',
+                        'note_qualite_5': 'mean',
+                        'lead_time_j': 'mean'
+                    }).reset_index()
+                    df_top['Score'] = (df_top['fiabilite_%'] * 0.4 + df_top['taux_service_%'] * 0.3 + df_top['note_qualite_5'] * 20 * 0.3).round(1)
+                    df_top = df_top.sort_values('Score', ascending=False)
+
+                    response = f"🏆 **TOP FOURNISSEURS (par Score Global):**\n\n"
+                    for idx, row in df_top.iterrows():
+                        response += f"**{idx+1}. {row['nom_fournisseur']}** - Score: {row['Score']}/100\n"
+                        response += f" - Fiabilité: {row['fiabilite_%']:.0f}% | Service: {row['taux_service_%']:.0f}%\n"
+                        response += f" - Qualité: {row['note_qualite_5']:.1f}/5 | Lead Time: {row['lead_time_j']:.0f}j\n\n"
+
+                    response += f"**💡 RECOMMANDATION:**\n"
+                    response += f"1. **{df_top.iloc[0]['nom_fournisseur']}** - A7sen score global\n"
+                    response += f"2. Diversifier m3a Top 3 bach t9ll risque\n"
+                    response += f"3. Négocier m3a {df_top.iloc[0]['nom_fournisseur']} contrat annuel"
+                else:
+                    response = "⚠️ Ma kaynach fichier fournisseurs. Uploadih f sidebar bach n3tik KPIs!"
+
+            elif "prix" in prompt_lower or "comparaison" in prompt_lower:
+                if df_fournisseurs is not None:
+                    response = f"💰 **COMPARAISON PRIX PAR MP:**\n\n"
+                    for mp in df['Code_MP'].unique():
+                        df_f_mp = df_fournisseurs[df_fournisseurs['code_mp'] == mp]
+                        if not df_f_mp.empty:
+                            min_prix = df_f_mp['prix_unitaire_eur'].min()
+                            max_prix = df_f_mp['prix_unitaire_eur'].max()
+                            economie = max_prix - min_prix
+                            best_f = df_f_mp.loc[df_f_mp['prix_unitaire_eur'].idxmin()]
+                            response += f"**{mp}:**\n"
+                            response += f" - Moins cher: {best_f['nom_fournisseur']} à {min_prix:.2f} EUR\n"
+                            response += f" - Plus cher: {max_prix:.2f} EUR\n"
+                            response += f" - Économie potentielle: {economie:.2f} EUR/kg 💰\n\n"
+                else:
+                    response = "⚠️ Uploadi fichier fournisseurs f sidebar!"
+
+            elif "rupture" in prompt_lower or "risque" in prompt_lower:
                 df_critique = df[df['Urgence'] == 3]
                 if not df_critique.empty:
-                    response = f"🚨 **ANALYSE DE RISQUE - SITUATION CRITIQUE DÉTECTÉE**\n\n"
-                    response += f"**{len(df_critique)} matières en risque de rupture:**\n\n"
-
+                    response = f"🚨 **PLAN D'ACTION RUPTURE:**\n\n"
                     for _, row in df_critique.iterrows():
-                        response += f"### 🔴 {row['Code_MP']} - {row['Designation']}\n"
-                        response += f"- **Stock Actuel:** {row['Stock_Actuel_kg']:.0f} kg\n"
-                        response += f"- **Couverture:** {row['Couverture_jours']:.1f} jours\n"
-                        response += f"- **Lead Time:** {row['Lead_Time_j']:.0f} jours\n"
-                        response += f"- **Retard Potentiel:** ⚠️ {row['Jours_Retard_Potentiel']:.0f} jours\n\n"
-                        response += f"**📋 PLAN D'ACTION IMMÉDIAT:**\n"
-                        response += f"1. **Action 1 - Commande Express:** Passer commande {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT (Coût: {row['Cout_Commande_EUR']:,.0f} EUR)\n"
-                        response += f"2. **Action 2 - Contacter Fournisseur:** Négocier réduction lead time wla livraison partielle urgente\n"
-                        response += f"3. **Action 3 - Stock Sécurité:** Vérifier si kayn stock de sécurité f autre site/entrepôt\n"
-                        response += f"4. **Action 4 - Alternative:** Chercher matière substitut wla fournisseur backup\n"
-                        response += f"5. **Action 5 - Production:** Ralentir consommation wla prioriser produits critiques\n\n"
-                        response += f"**⏰ Timeline:** Commande aujourd'hui → Livraison dans {row['Lead_Time_j']:.0f}j → Rupture évitée si action < {row['Couverture_jours']:.0f}j\n\n---\n\n"
+                        response += f"### 🔴 {row['Code_MP']}\n"
+                        response += f"**Fournisseur Recommandé:** {row['Fournisseur_Recommande']}\n"
+                        response += f"**Actions:**\n"
+                        response += f"1. Commander {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT\n"
+                        response += f"2. Contacter {row['Fournisseur_Recommande']} - urgence\n"
+                        response += f"3. Lead time: {row['Lead_Time_Optimal_j']:.0f}j\n\n"
                 else:
-                    response = "✅ **Bonne nouvelle!** Ma kayn 7ta MP f risque rupture critique daba.\n\nMais khllik vigilant 3la MPs f 🟠 Attention:\n"
-                    df_attention = df[df['Urgence'] == 2]
-                    for _, row in df_attention.iterrows():
-                        response += f"- {row['Code_MP']}: Commander avant {row['Date_Commande_Suggeree']}\n"
+                    response = "✅ Ma kayn 7ta risque rupture!"
 
-            elif any(word in prompt_lower for word in ["retard", "fournisseur", "livraison", "délai"]):
-                response = f"⏰ **PLAN D'ACTION - RETARD FOURNISSEUR**\n\n"
-                response += f"**Situation:** Fournisseur retardé w stock ghadi ysali\n\n"
-                response += f"**📋 ACTIONS À PRENDRE:**\n\n"
-                response += f"**1. IMMÉDIAT (0-24h):**\n"
-                response += f" - Contacter fournisseur: confirmer nouvelle date livraison\n"
-                response += f" - Demander livraison partielle/split delivery\n"
-                response += f" - Activer clause pénalité retard f contrat\n\n"
-                response += f"**2. COURT TERME (1-7j):**\n"
-                response += f" - Chercher fournisseur backup/alternatif\n"
-                response += f" - Vérifier stock f autres sites du groupe\n"
-                response += f" - Négocier prêt/emprunt m3a concurrent\n\n"
-                response += f"**3. MOYEN TERME (1-4 semaines):**\n"
-                response += f" - Revoir planning production: prioriser produits\n"
-                response += f" - Augmenter stock sécurité l had MP\n"
-                response += f" - Diversifier fournisseurs (dual sourcing)\n\n"
-                response += f"**4. PRÉVENTION FUTURE:**\n"
-                response += f" - Mettre en place VMI (Vendor Managed Inventory)\n"
-                response += f" - Contrats cadre m3a pénalités claires\n"
-                response += f" - Système alerte précoce lead time\n\n"
-                response += f"**💡 CONSEIL:** Dima 3ndk Plan B w Plan C l MPs critiques!"
-
-            elif any(word in prompt_lower for word in ["coût", "cout", "budget", "cher", "économiser", "optimiser"]):
-                total = df['Cout_Commande_EUR'].sum()
-                top_cher = df.nlargest(5, 'Cout_Commande_EUR')
-                response = f"💰 **ANALYSE BUDGET & OPTIMISATION COÛTS**\n\n"
-                response += f"**Budget Total Prévu:** {total:,.0f} EUR\n\n"
-                response += f"**🔝 Top 5 MPs les plus chères:**\n"
-                for _, row in top_cher.iterrows():
-                    pct = (row['Cout_Commande_EUR']/total)*100
-                    response += f"- {row['Code_MP']}: {row['Cout_Commande_EUR']:,.0f} EUR ({pct:.1f}% du budget)\n"
-                response += f"\n**💡 STRATÉGIES D'OPTIMISATION:**\n\n"
-                response += f"**1. Négociation Volume:**\n"
-                response += f" - Grouper commandes → remise quantité 5-15%\n"
-                response += f" - Contrat annuel → prix bloqué\n\n"
-                response += f"**2. Optimisation MOQ:**\n"
-                response += f" - Vérifier si MOQ trop élevé → négocier baisse\n"
-                response += f" - Mutualiser commandes m3a autres sites\n\n"
-                response += f"**3. Substitution:**\n"
-                response += f" - Chercher matière alternative moins chère\n"
-                response += f" - Analyser coût total (prix + transport + stockage)\n\n"
-                response += f"**4. Gestion Stock:**\n"
-                response += f" - Réduire stock sécurité si risque faible → -10% coût\n"
-                response += f" - Juste-à-temps l MPs non-critiques\n\n"
-                response += f"**🎯 Économie Potentielle Estimée:** {total*0.08:,.0f} - {total*0.15:,.0f} EUR (8-15%)"
-
-            elif any(word in prompt_lower for word in ["simulation", "what-if", "si", "wila"]):
-                response = f"🔮 **SIMULATION WHAT-IF - Scénarios**\n\n"
-                response += f"**Scénario 1: Wila Zedna Stock Sécurité +20%**\n"
-                nouveau_cout = cout * 1.2
-                response += f" - Nouveau budget: {nouveau_cout:,.0f} EUR (+{nouveau_cout-cout:,.0f})\n"
-                response += f" - Avantage: Couverture +{HORIZON_JOURS*0.2:.0f} jours, risque rupture ↓80%\n"
-                response += f" - Inconvénient: Immobilisation trésorerie\n\n"
-                response += f"**Scénario 2: Wila N9ssna Consommation -15%**\n"
-                economie = cout * 0.15
-                response += f" - Économie: {economie:,.0f} EUR\n"
-                response += f" - Impact: Couverture +{(HORIZON_JOURS*0.15):.0f} jours\n"
-                response += f" - Action: Optimiser process, réduire rebuts\n\n"
-                response += f"**Scénario 3: Wila Fournisseur Zed Lead Time +5j**\n"
-                response += f" - MPs supplémentaires en risque: ~{len(df[df['Couverture_jours'] < df['Lead_Time_j'] + 5])}\n"
-                response += f" - Action: Commander plus tôt, augmenter stock sécurité\n\n"
-                response += f"**💡 Recommandation:** Simuler f Excel wla bghit simulation précise 3la MP spécifique, goul lia smiytha!"
-
-            elif any(mp in prompt.upper() for mp in df['Code_MP'].tolist()):
-                for mp in df['Code_MP'].tolist():
-                    if mp in prompt.upper():
-                        row = df[df['Code_MP'] == mp].iloc[0]
-                        response = f"**📊 ANALYSE COMPLÈTE - {row['Code_MP']}**\n\n"
-                        response += f"**{row['Designation']}**\n\n"
-                        response += f"**📈 Situation Actuelle:**\n"
-                        response += f"- Stock: {row['Stock_Actuel_kg']:.0f} kg\n"
-                        response += f"- Besoin {HORIZON_JOURS}j: {row['Besoin_Prevu_kg']:.0f} kg\n"
-                        response += f"- Couverture: {row['Couverture_jours']:.1f} jours\n"
-                        response += f"- Status: {row['Status']}\n"
-                        response += f"- Niveau Risque: {row['Risque']}\n\n"
-                        response += f"**📦 Recommandation Commande:**\n"
-                        response += f"- Quantité: **{row['QTE_A_COMMANDER_kg']:.0f} kg** (MOQ: {row['MOQ_kg']:.0f}kg)\n"
-                        response += f"- Coût: {row['Cout_Commande_EUR']:,.0f} EUR\n"
-                        response += f"- Date Suggérée: {row['Date_Commande_Suggeree']}\n"
-                        response += f"- Lead Time: {row['Lead_Time_j']:.0f} jours\n\n"
-
-                        if row['Urgence'] == 3:
-                            response += f"**🚨 PLAN D'ACTION CRITIQUE:**\n"
-                            response += f"1. Commander MAINTENANT - Retard {row['Jours_Retard_Potentiel']:.0f}j si non\n"
-                            response += f"2. Appeler fournisseur: urgence, livraison express\n"
-                            response += f"3. Alerter Production: risque arrêt ligne\n"
-                            response += f"4. Chercher stock urgence/alternative\n"
-                        elif row['Urgence'] == 2:
-                            response += f"**⚠️ PLAN D'ACTION PRÉVENTIF:**\n"
-                            response += f"1. Planifier commande avant {row['Date_Commande_Suggeree']}\n"
-                            response += f"2. Confirmer disponibilité fournisseur\n"
-                            response += f"3. Surveiller consommation quotidienne\n"
-                        else:
-                            response += f"**✅ SITUATION SAINE:**\n"
-                            response += f"- Stock suffisant l {row['Couverture_jours']:.0f} jours\n"
-                            response += f"- Pas d'action urgente requise\n"
-                            response += f"- Prochaine commande: {row['Date_Commande_Suggeree']}"
-                        break
             else:
-                response = f"""**🧠 CONSULTANT IA - Résumé Exécutif**
+                response = f"""**📊 RÉSUMÉ:**
 
-**📊 État Global:**
-- 💰 Budget: {cout:,.0f} EUR
-- 🔴 Critique: {len(df[df['Urgence']==3])} MP (Action immédiate)
-- 🟠 Attention: {len(df[df['Urgence']==2])} MP (À surveiller)
-- 🟢 OK: {len(df[df['Urgence']==1])} MP
+💰 Budget: {st.session_state['cout_total']:,.0f} EUR
+🔴 Critique: {len(df[df['Urgence']==3])} MP
+🏭 Fournisseurs: {df['Fournisseur_Recommande'].nunique() if 'Fournisseur_Recommande' in df else 'N/A'}
 
-**🎯 Top 3 Priorités:**
-{df.nlargest(3, 'Urgence')[['Code_MP', 'Designation', 'Status']].to_string(index=False)}
-
-**💡 Questions Suggérées:**
-- "Chno ndir f cas rupture?"
-- "Kifach n9ll l budget?"
-- "Simulation wila retard fournisseur"
-- "Analyse [Code_MP]"
-
-**Swel 3la ay mochkil w n3tik plan d'action détaillé!**"""
+**Swel 3la:** fournisseurs, prix, rupture, [Code_MP]"""
 
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 else:
-    st.info("👆 Uploadi l fichiers w click 'Générer Plan' bach yt7ll lik Consultant IA")
+    st.info("👆 Uploadi fichiers w click 'Générer Plan' bach yban kolchi")
