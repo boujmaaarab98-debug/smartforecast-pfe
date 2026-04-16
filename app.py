@@ -36,8 +36,13 @@ def charger_donnees_google():
         return param, conso, mrp, fournis
     except Exception as e:
         st.error(f"❌ Erreur lecture Google Sheets: {e}")
-        st.error("**Vérifier:** 1) Partager = Anyone with link 2) Smiyat feuilles: Param, Conso, MRP, Fournisseurs")
-        return None, None
+        st.error("""
+        **Vérifier:**
+        1. **Partager** → General access → **Anyone with the link** → **Viewer** → Done
+        2. Smiyat les onglets exact: **Param** **Conso** **MRP** **Fournisseurs**
+        """)
+        # MHM: Khassna 4 dyal None, machi 2
+        return None, None, None, None
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
     """Analyse MRP vs Appro + Prévision Prophet"""
@@ -50,6 +55,15 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
     col_date_mrp = trouver_colonne(mrp, ['date_besoin', 'Date_Besoin', 'Date'])
     col_mp_mrp = trouver_colonne(mrp, ['code_mp', 'Code_MP', 'Code', 'MP'])
     col_qte_mrp = trouver_colonne(mrp, ['qte_besoin_kg', 'Qte_Besoin', 'Besoin', 'Qte'])
+
+    # Vérifier que les colonnes existent
+    if not all([col_date_conso, col_mp_conso, col_qte_conso]):
+        st.error("❌ Colonnes manquantes dans feuille 'Conso'. Vérifier: date, code_mp, qte_consommee_kg")
+        return pd.DataFrame()
+
+    if not all([col_date_mrp, col_mp_mrp, col_qte_mrp]):
+        st.error("❌ Colonnes manquantes dans feuille 'MRP'. Vérifier: date_besoin, code_mp, qte_besoin_kg")
+        return pd.DataFrame()
 
     conso = conso.rename(columns={col_date_conso: 'Date', col_mp_conso: 'Code_MP', col_qte_conso: 'Qte_Consommee'})
     mrp = mrp.rename(columns={col_date_mrp: 'Date_Besoin', col_mp_mrp: 'Code_MP', col_qte_mrp: 'Qte_Besoin'})
@@ -72,6 +86,10 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
         df_prophet = hist.groupby('Date')['Qte_Consommee'].sum().reset_index()
         df_prophet.columns = ['ds', 'y']
+        df_prophet = df_prophet.dropna()
+
+        if len(df_prophet) < 10:
+            continue
 
         # 2. Prévision Prophet 30j
         try:
@@ -147,41 +165,48 @@ if st.sidebar.button("🔄 Actualiser Données Google Sheets"):
 with st.spinner("Chargement depuis Google Sheets..."):
     param, conso, mrp, fournis = charger_donnees_google()
 
-if param is not None:
+if param is not None and conso is not None and mrp is not None and fournis is not None:
     st.success(f"✅ {len(param)} MPs | {len(conso)} lignes conso | {len(mrp)} lignes MRP | {len(fournis)} fournisseurs")
 
     if st.button("🚀 Analyser MRP vs Appro", type="primary", use_container_width=True):
         with st.spinner("Analyse en cours... Prophet kay 7sseb..."):
             df_result = analyser_mrp_appro(param, conso, mrp, fournis)
 
-        st.subheader("📊 Résultats de l'Analyse")
-        st.dataframe(df_result, use_container_width=True, height=400)
+        if len(df_result) > 0:
+            st.subheader("📊 Résultats de l'Analyse")
+            st.dataframe(df_result, use_container_width=True, height=400)
 
-        # Stats
-        col1, col2, col3, col4 = st.columns(4)
-        critique = len(df_result[df_result['Statut'].str.contains('CRITIQUE')])
-        tension = len(df_result[df_result['Statut'].str.contains('TENSION')])
-        aligne = len(df_result[df_result['Statut'].str.contains('ALIGNÉ')])
-        total = len(df_result)
+            # Stats
+            col1, col2, col3, col4 = st.columns(4)
+            critique = len(df_result[df_result['Statut'].str.contains('CRITIQUE')])
+            tension = len(df_result[df_result['Statut'].str.contains('TENSION')])
+            aligne = len(df_result[df_result['Statut'].str.contains('ALIGNÉ')])
+            total = len(df_result)
 
-        col1.metric("🔴 Critiques", critique, f"{critique/total*100:.0f}%")
-        col2.metric("🟠 Tensions", tension, f"{tension/total*100:.0f}%")
-        col3.metric("🟢 Alignés", aligne, f"{aligne/total*100:.0f}%")
-        col4.metric("📦 Total MPs", total)
+            col1.metric("🔴 Critiques", critique, f"{critique/total*100:.0f}%" if total > 0 else "0%")
+            col2.metric("🟠 Tensions", tension, f"{tension/total*100:.0f}%" if total > 0 else "0%")
+            col3.metric("🟢 Alignés", aligne, f"{aligne/total*100:.0f}%" if total > 0 else "0%")
+            col4.metric("📦 Total MPs", total)
 
-        # Télécharger
-        csv = df_result.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            "📥 Télécharger Résultats CSV",
-            csv,
-            f"MRP_Analyse_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            "text/csv",
-            use_container_width=True
-        )
+            # Télécharger
+            csv = df_result.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                "📥 Télécharger Résultats CSV",
+                csv,
+                f"MRP_Analyse_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        else:
+            st.warning("⚠️ Aucun résultat. Vérifier que les MPs dans Param existent dans Conso avec au moins 10 lignes d'historique.")
 else:
     st.warning("⚠️ Impossible de charger les données.")
     st.info("""
-    **Vérifier:**
-    1. Ouvrir Google Sheet → **Partager** → **Anyone with the link** → **Viewer**
-    2. Smiyat les onglets: **Param** **Conso** **MRP** **Fournisseurs** - exact!
+    **ÉTAPES À VÉRIFIER:**
+
+    1. **Ouvrir Google Sheet `MRP_Analyse`** → Click **Partager**
+    2. **General access** → Changer l **Anyone with the link**
+    3. **Viewer** → **Done**
+    4. **Smiyat les onglets exact:** `Param` `Conso` `MRP` `Fournisseurs`
+    5. **Refresh l'app** → Click "🔄 Actualiser"
     """)
