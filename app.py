@@ -20,6 +20,8 @@ if 'historique_plans' not in st.session_state:
     st.session_state['historique_plans'] = []
 if 'fichiers_additionnels' not in st.session_state:
     st.session_state['fichiers_additionnels'] = {}
+if 'messages' not in st.session_state:
+    st.session_state['messages'] = []
 
 # SIDEBAR
 with st.sidebar:
@@ -149,7 +151,6 @@ if fichier_conso and fichier_param:
                     if df_fournisseurs is not None:
                         df_f_mp = df_fournisseurs[df_fournisseurs['code_mp'] == code_mp].copy()
                         if not df_f_mp.empty:
-                            prix_min = df_f_mp['prix_unitaire_eur'].min()
                             df_f_mp['score'] = (
                                 df_f_mp.get('fiabilite_%', 90) * 0.4 +
                                 df_f_mp.get('taux_service_%', 90) * 0.3 +
@@ -235,30 +236,26 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs - 3 × 3 = 9 KPIs WADH7IN
+                # DASHBOARD KPIs - 3 × 3
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
-                # STR 1 - FINANCIER
                 col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR", help="Total à commander maintenant")
-                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR", help="Stock immobilisé actuellement")
-                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
+                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR")
+                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR")
+                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an")
 
-                # STR 2 - PERFORMANCE STOCK
                 col4, col5, col6 = st.columns(3)
-                col4.metric("🔄 Rotation Moyenne", f"{kpis_globaux['rotation_moyenne']:.1f}x/an", help="Objectif: 12x/an")
-                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
-                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
+                col4.metric("🔄 Rotation Moyenne", f"{kpis_globaux['rotation_moyenne']:.1f}x/an")
+                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours")
+                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%")
 
-                # STR 3 - RISQUES & ALIGNEMENT
                 col7, col8, col9 = st.columns(3)
-                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture", delta_color="inverse")
-                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="Risque arrêt production", delta_color="inverse")
+                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", delta_color="inverse")
+                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", delta_color="inverse")
                 col9.metric("🎯 Aligné MRP", f"{kpis_globaux['taux_alignement_mrp']:.0f}%",
                            delta=f"{kpis_globaux['nb_non_alignes']} non alignés" if kpis_globaux['nb_non_alignes'] > 0 else "✓ Parfait",
-                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
-                           help="Alignement avec Production")
+                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal")
 
                 # ALERTES
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
@@ -327,24 +324,36 @@ if fichier_conso and fichier_param:
         st.success(f"✅ Plan sauvegardé!")
         st.rerun()
 
-# CHAT IA
+# ============================================
+# CHAT IA M3A BOUTON EFFACER HISTORIQUE
+# ============================================
 if 'df_resultat' in st.session_state:
     st.divider()
-    st.header("🧠 Assistant MRP ↔ Appro")
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        st.session_state.messages.append({
+    # TITRE + BOUTON EFFACER - HADA HWA L BOUTON A BTAL!
+    col_chat_title, col_clear_btn = st.columns([4, 1])
+    with col_chat_title:
+        st.header("🧠 Assistant MRP ↔ Appro")
+    with col_clear_btn:
+        if st.button("🗑️ Effacer Chat", use_container_width=True, type="secondary"):
+            st.session_state['messages'] = []
+            st.rerun()
+
+    # Message bienvenue ila l chat khawi
+    if len(st.session_state['messages']) == 0:
+        st.session_state['messages'].append({
             "role": "assistant",
             "content": "👋 **Salam!** N9der n3awnk f:\n- 📊 **Alignement MRP** - Wach 7na à jour m3a Production?\n- ⚠️ **Écarts** - Far9 bin MRP w Prévision\n- 🔴 **Critiques** - MPs li ghadi ywe99fou Production\n- 💡 **Actions** - Chno ncommandiw daba\n\n**Swel!**"
         })
 
-    for message in st.session_state.messages:
+    # Afficher messages
+    for message in st.session_state['messages']:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # Input dyal chat
     if prompt := st.chat_input("Swel... Ex: Wach 7na à jour m3a MRP?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state['messages'].append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
@@ -389,7 +398,7 @@ if 'df_resultat' in st.session_state:
             elif "critique" in prompt_lower or "urgent" in prompt_lower:
                 df_crit = df[df['Urgence'] == 3]
                 if not df_crit.empty:
-                    response = f"🚨 **MPs CRITIQUES - RISQUE ARRÊT PRODUCTION**\n\n"
+                    response = f"🚨 **MPs CRITIQUES - RISQUE ARRÊT PRODUCTION**\n"
                     for _, row in df_crit.iterrows():
                         response += f"**🔴 {row['Code_MP']} - {row['Designation']}**\n"
                         response += f" - Besoin MRP: {row['Besoin_MRP_kg']:.0f}kg\n"
