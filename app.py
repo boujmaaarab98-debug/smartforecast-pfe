@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # ========================================
-# CONFIG - BDL HNA SHEET_ID DYALK
+# CONFIG - SHEET_ID DYALK RAH M7TOT
 # ========================================
-SHEET_ID = "11XDfY8VOOQKqR0VvbPmzeE0ZIL9Y19GNi3IugGASMxc"
+SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
 
 # ========================================
 # FUNCTIONS
@@ -35,9 +35,9 @@ def charger_donnees_google():
         fournis = pd.read_csv(base_url + "Fournisseurs")
         return param, conso, mrp, fournis
     except Exception as e:
-        st.error(f"Erreur lecture Google Sheets: {e}")
-        st.error("Vérifier: 1) Share = Anyone with link 2) Smiyat feuilles s7a7")
-        return None, None, None, None
+        st.error(f"❌ Erreur lecture Google Sheets: {e}")
+        st.error("**Vérifier:** 1) Partager = Anyone with link 2) Smiyat feuilles: Param, Conso, MRP, Fournisseurs")
+        return None, None
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
     """Analyse MRP vs Appro + Prévision Prophet"""
@@ -118,6 +118,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
         resultats.append({
             'Code MP': code,
+            'Désignation': mp_row.get('designation', 'N/A'),
             'Stock Actuel': f"{stock_secu:,.0f}",
             'Besoin MRP': f"{besoin_mrp:,.0f}",
             'Conso Prévue 30j': f"{conso_prevue_30j:,.0f}",
@@ -135,6 +136,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 st.set_page_config(page_title="MRP vs Appro", layout="wide")
 st.title("🎯 Analyse MRP vs Approvisionnement")
+st.caption("Google Sheets: MRP_Analyse | 4 onglets: Param, Conso, MRP, Fournisseurs")
 
 st.sidebar.header("⚙️ Configuration")
 if st.sidebar.button("🔄 Actualiser Données Google Sheets"):
@@ -146,23 +148,40 @@ with st.spinner("Chargement depuis Google Sheets..."):
     param, conso, mrp, fournis = charger_donnees_google()
 
 if param is not None:
-    st.success(f"✅ {len(param)} MPs | {len(conso)} lignes conso | {len(mrp)} lignes MRP")
+    st.success(f"✅ {len(param)} MPs | {len(conso)} lignes conso | {len(mrp)} lignes MRP | {len(fournis)} fournisseurs")
 
-    if st.button("🚀 Analyser MRP vs Appro", type="primary"):
-        with st.spinner("Analyse en cours..."):
+    if st.button("🚀 Analyser MRP vs Appro", type="primary", use_container_width=True):
+        with st.spinner("Analyse en cours... Prophet kay 7sseb..."):
             df_result = analyser_mrp_appro(param, conso, mrp, fournis)
 
-        st.subheader("📊 Résultats")
-        st.dataframe(df_result, use_container_width=True)
+        st.subheader("📊 Résultats de l'Analyse")
+        st.dataframe(df_result, use_container_width=True, height=400)
 
         # Stats
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         critique = len(df_result[df_result['Statut'].str.contains('CRITIQUE')])
         tension = len(df_result[df_result['Statut'].str.contains('TENSION')])
         aligne = len(df_result[df_result['Statut'].str.contains('ALIGNÉ')])
+        total = len(df_result)
 
-        col1.metric("🔴 Critiques", critique)
-        col2.metric("🟠 Tensions", tension)
-        col3.metric("🟢 Alignés", aligne)
+        col1.metric("🔴 Critiques", critique, f"{critique/total*100:.0f}%")
+        col2.metric("🟠 Tensions", tension, f"{tension/total*100:.0f}%")
+        col3.metric("🟢 Alignés", aligne, f"{aligne/total*100:.0f}%")
+        col4.metric("📦 Total MPs", total)
+
+        # Télécharger
+        csv = df_result.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            "📥 Télécharger Résultats CSV",
+            csv,
+            f"MRP_Analyse_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            "text/csv",
+            use_container_width=True
+        )
 else:
-    st.warning("Impossible de charger les données. Vérifier SHEET_ID et Sharing.")
+    st.warning("⚠️ Impossible de charger les données.")
+    st.info("""
+    **Vérifier:**
+    1. Ouvrir Google Sheet → **Partager** → **Anyone with the link** → **Viewer**
+    2. Smiyat les onglets: **Param** **Conso** **MRP** **Fournisseurs** - exact!
+    """)
