@@ -217,7 +217,6 @@ if fichier_conso and fichier_param:
             if resultats_globaux:
                 df_plan = pd.DataFrame(resultats_globaux).sort_values('Urgence', ascending=False)
 
-                # Calcul Taux Rotation % = Rotation × 100
                 taux_rotation_pct = (df_plan['Rotation_x/an'].mean() * 100) if df_plan['Rotation_x/an'].mean() < 10 else min(df_plan['Rotation_x/an'].mean() * 100, 999)
 
                 kpis_globaux = {
@@ -240,7 +239,7 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs - ROTATION B TAUX %
+                # DASHBOARD KPIs
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
@@ -262,47 +261,71 @@ if fichier_conso and fichier_param:
                            delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
                            help="Alignement avec Production")
 
-                # ALERTES - GRAPHIQUE 3IWAD TEXTE
+                # ALERTES - GRAPHIQUE M3A STOCK + COUVERTURE + LEAD TIME
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
                 if len(df_non_aligne) > 0:
                     st.divider()
                     st.subheader("🚨 ALERTES: MPs Non Alignées avec Production")
 
-                    # Graphique Bar: Couverture vs Lead Time
+                    # Graphique avec 2 axes Y
                     fig_alertes = go.Figure()
 
-                    # Bar Couverture
+                    # Bar 1: Stock Actuel (kg) - Axe Y Gauche
+                    fig_alertes.add_trace(go.Bar(
+                        x=df_non_aligne['Code_MP'],
+                        y=df_non_aligne['Stock_Actuel_kg'],
+                        name='Stock Actuel (kg)',
+                        marker_color='#ff9999',
+                        text=df_non_aligne['Stock_Actuel_kg'].astype(int).astype(str) + 'kg',
+                        textposition='auto',
+                        yaxis='y',
+                        offsetgroup=1
+                    ))
+
+                    # Bar 2: Couverture (jours) - Axe Y Droit
                     fig_alertes.add_trace(go.Bar(
                         x=df_non_aligne['Code_MP'],
                         y=df_non_aligne['Couverture_j'],
-                        name='Couverture Actuelle',
+                        name='Couverture (jours)',
                         marker_color='#ff4444',
                         text=df_non_aligne['Couverture_j'].round(1).astype(str) + 'j',
                         textposition='auto',
+                        yaxis='y2',
+                        offsetgroup=2
                     ))
 
                     # Ligne Lead Time
                     fig_alertes.add_trace(go.Scatter(
                         x=df_non_aligne['Code_MP'],
                         y=df_non_aligne['Lead_Time_j'],
-                        name='Lead Time Requis',
+                        name='Lead Time Requis (j)',
                         mode='lines+markers',
-                        line=dict(color='#000', width=3, dash='dash'),
-                        marker=dict(size=10, color='#000000'),
+                        line=dict(color='#000000', width=3, dash='dash'),
+                        marker=dict(size=10, color='#000000', symbol='diamond'),
+                        yaxis='y2'
                     ))
 
                     fig_alertes.update_layout(
-                        title="⚠️ Couverture Stock vs Lead Time Fournisseur",
-                        xaxis_title="Code MP",
-                        yaxis_title="Jours",
+                        title="⚠️ Stock vs Couverture vs Lead Time",
+                        xaxis=dict(title="Code MP"),
+                        yaxis=dict(
+                            title="Stock (kg)",
+                            side='left',
+                            showgrid=False
+                        ),
+                        yaxis2=dict(
+                            title="Jours",
+                            side='right',
+                            overlaying='y',
+                            showgrid=True
+                        ),
                         barmode='group',
-                        height=400,
-                        showlegend=True,
-                        hovermode='x unified'
+                        height=450,
+                        hovermode='x unified',
+                        legend=dict(x=0.7, y=1.1, orientation='h')
                     )
 
-                    # Zone critique
-                    fig_alertes.add_hline(y=0, line_dash="solid", line_color="red",
+                    fig_alertes.add_hline(y=0, line_dash="solid", line_color="red", yref='y2',
                                          annotation_text="RISQUE ARRÊT PRODUCTION",
                                          annotation_position="top right")
 
