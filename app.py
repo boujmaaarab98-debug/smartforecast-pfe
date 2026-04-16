@@ -61,6 +61,36 @@ with st.sidebar:
                 st.session_state['kpis'] = plan.get('kpis', {})
                 st.rerun()
 
+# FONCTIONS
+def trouver_colonne(df, noms_possibles):
+    for nom in noms_possibles:
+        if nom in df.columns:
+            return nom
+        for col in df.columns:
+            if col.lower().strip() == nom.lower().strip():
+                return col
+    return None
+
+def calculer_score_fournisseur(row):
+    score_prix = 10 - (row['prix_unitaire_eur'] / 10)
+    score_lead = 10 - (row['lead_time_j'] / 3)
+    score_fiab = row['fiabilite_%'] / 10
+    score_qual = row['note_qualite_5'] * 2
+    score_total = (score_prix * 0.4) + (score_lead * 0.3) + (score_fiab * 0.2) + (score_qual * 0.1)
+    return round(max(0, min(10, score_total)), 2)
+
+def determiner_statut_rotation(taux):
+    if taux < 100:
+        return "🔴 Stock Dormant", "danger"
+    elif taux < 150:
+        return "🟡 Rotation Faible", "warning"
+    elif taux <= 400:
+        return "🟢 Normal", "success"
+    elif taux <= 600:
+        return "🔵 Optimisé", "info"
+    else:
+        return "🟠 Risque Rupture", "danger"
+
 # MAIN
 if fichier_conso and fichier_param:
     df_conso = pd.read_excel(fichier_conso)
@@ -69,22 +99,34 @@ if fichier_conso and fichier_param:
 
     st.success(f"✅ {len(df_param)} matières chargées")
 
-    # Nettoyage colonnes - DÉTECTION AUTOMATIQUE
+    # Nettoyage colonnes
     df_param.columns = df_param.columns.str.strip()
     df_conso.columns = df_conso.columns.str.strip()
 
-    # Noms colonnes flexibles
-    col_code_mp = 'code_mp' if 'code_mp' in df_param.columns else df_param.columns[0]
-    col_designation = 'designation' if 'designation' in df_param.columns else df_param.columns[1]
-    col_stock = 'stock_secu_actuel' if 'stock_secu_actuel' in df_param.columns else [c for c in df_param.columns if 'stock' in c.lower()][0]
-    col_prix = 'cout_unitaire' if 'cout_unitaire' in df_param.columns else [c for c in df_param.columns if 'cout' in c.lower() or 'prix' in c.lower()][0]
-    col_moq = 'moq_kg' if 'moq_kg' in df_param.columns else [c for c in df_param.columns if 'moq' in c.lower()][0]
-    col_lead = 'lead_time_j' if 'lead_time_j' in df_param.columns else [c for c in df_param.columns if 'lead' in c.lower() or 'delai' in c.lower()][0]
+    # Détection colonnes
+    col_code_mp = trouver_colonne(df_param, ['code_mp', 'Code_MP', 'code', 'Code', 'MP'])
+    col_designation = trouver_colonne(df_param, ['designation', 'Designation', 'Nom', 'nom'])
+    col_stock = trouver_colonne(df_param, ['stock_secu_actuel', 'Stock_Actuel', 'stock_actuel', 'Stock'])
+    col_prix = trouver_colonne(df_param, ['cout_unitaire', 'Cout_Unitaire', 'prix', 'Prix'])
+    col_moq = trouver_colonne(df_param, ['moq_kg', 'MOQ_kg', 'MOQ', 'moq'])
+    col_lead = trouver_colonne(df_param, ['lead_time_j', 'Lead_Time_J', 'lead_time', 'Delai'])
 
-    # Colonnes conso
-    col_date_conso = 'date' if 'date' in df_conso.columns else df_conso.columns[0]
-    col_code_mp_conso = 'code_mp' if 'code_mp' in df_conso.columns else df_conso.columns[1]
-    col_qte_conso = 'qte_consommee_kg' if 'qte_consommee_kg' in df_conso.columns else [c for c in df_conso.columns if 'qte' in c.lower() or 'quantite' in c.lower()][0]
+    col_date_conso = trouver_colonne(df_conso, ['date', 'Date', 'DATE', 'Date_Conso', 'Jour'])
+    col_code_mp_conso = trouver_colonne(df_conso, ['code_mp', 'Code_MP', 'Code', 'code', 'MP'])
+    col_qte_conso = trouver_colonne(df_conso, ['qte_consommee_kg', 'Qte_Consommee', 'Quantite', 'quantite', 'Qte', 'Consommation'])
+
+    # Vérification
+    if not col_code_mp or not col_stock:
+        st.error(f"❌ Colonnes manquantes dans Paramètres")
+        st.write("**Trouvées:**", list(df_param.columns))
+        st.stop()
+
+    if not col_date_conso or not col_code_mp_conso or not col_qte_conso:
+        st.error(f"❌ Colonnes manquantes dans Consommation")
+        st.write("**Trouvées:**", list(df_conso.columns))
+        st.stop()
+
+    df_conso = df_conso.rename(columns={col_date_conso: 'Date', col_code_mp_conso: 'Code_MP', col_qte_conso: 'Qte_Consommee'})
 
     if df_mrp is not None:
         st.info(f"📋 **MRP Chargé:** {len(df_mrp)} besoins production")
@@ -108,21 +150,21 @@ if fichier_conso and fichier_param:
 
             for i, code_mp in enumerate(liste_mp):
                 try:
-                    df_mp = df_conso[df_conso[col_code_mp_conso] == code_mp].copy()
-                    df_mp[col_date_conso] = pd.to_datetime(df_mp[col_date_conso], errors='coerce')
-                    df_mp = df_mp.dropna(subset=[col_date_conso])
-                    df_mp = df_mp.sort_values(col_date_conso)
+                    df_mp = df_conso[df_conso['Code_MP'] == code_mp].copy()
+                    df_mp['Date'] = pd.to_datetime(df_mp['Date'], errors='coerce')
+                    df_mp = df_mp.dropna(subset=['Date'])
+                    df_mp = df_mp.sort_values('Date')
 
                     if len(df_mp) < 2:
                         continue
 
-                    nb_jours = (df_mp[col_date_conso].max() - df_mp[col_date_conso].min()).days
+                    nb_jours = (df_mp['Date'].max() - df_mp['Date'].min()).days
                     if nb_jours == 0:
                         nb_jours = 365
-                    conso_totale = df_mp[col_qte_conso].sum()
+                    conso_totale = df_mp['Qte_Consommee'].sum()
                     conso_annuelle = (conso_totale / nb_jours * 365) if nb_jours > 0 else 0
 
-                    df_prophet = df_mp.rename(columns={col_date_conso: 'ds', col_qte_conso: 'y'})
+                    df_prophet = df_mp.rename(columns={'Date': 'ds', 'Qte_Consommee': 'y'})
                     model = Prophet(daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=True)
                     model.fit(df_prophet)
                     future = model.make_future_dataframe(periods=HORIZON_JOURS)
@@ -172,16 +214,16 @@ if fichier_conso and fichier_param:
                     couverture_jours = stock_actuel / (besoin_final / HORIZON_JOURS) if besoin_final > 0 else 999
 
                     ecart_mrp_prophet = besoin_mrp - besoin_prevu_prophet if besoin_mrp > 0 else 0
-                    jours_rupture = len(df_mp[df_mp[col_qte_conso] > stock_actuel])
+                    jours_rupture = len(df_mp[df_mp['Qte_Consommee'] > stock_actuel])
                     taux_rupture = (jours_rupture / len(df_mp) * 100) if len(df_mp) > 0 else 0
 
-                    # ✅ ROTATION WA9I3IYA - SANS PLAFOND 999%
+                    # ROTATION WA9I3IYA - SANS PLAFOND
                     if stock_actuel <= 1:
                         rotation = 0
                         taux_rotation_pct = 0
                     else:
                         rotation = conso_annuelle / stock_actuel
-                        taux_rotation_pct = rotation * 100 # 👈 SANS min(..., 500)
+                        taux_rotation_pct = rotation * 100
 
                     cout_possession = stock_actuel * prix_optimal * TAUX_POSSESSION_ANNUEL
 
@@ -255,22 +297,21 @@ if fichier_conso and fichier_param:
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR", help="Total à commander maintenant")
-                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR", help="Stock immobilisé actuellement")
-                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
+                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR")
+                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR")
+                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an")
 
                 col4, col5, col6 = st.columns(3)
-                col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%", help="Objectif: >200% = Excellent, <100% = Stock dormant")
-                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
-                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
+                col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%")
+                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours")
+                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%")
 
                 col7, col8, col9 = st.columns(3)
-                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture", delta_color="inverse")
-                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="Risque arrêt production", delta_color="inverse")
+                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", delta_color="inverse")
+                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", delta_color="inverse")
                 col9.metric("🎯 Aligné MRP", f"{kpis_globaux['taux_alignement_mrp']:.0f}%",
                            delta=f"{kpis_globaux['nb_non_alignes']} non alignés" if kpis_globaux['nb_non_alignes'] > 0 else "✓ Parfait",
-                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
-                           help="Alignement avec Production")
+                           delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal")
 
                 # ALERTES
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
@@ -318,9 +359,7 @@ if fichier_conso and fichier_param:
                         hovermode='x unified',
                         legend=dict(x=0.7, y=1.1, orientation='h')
                     )
-                    fig_alertes.add_hline(y=0, line_dash="solid", line_color="red", yref='y2',
-                                         annotation_text="RISQUE ARRÊT PRODUCTION",
-                                         annotation_position="top right")
+                    fig_alertes.add_hline(y=0, line_dash="solid", line_color="red", yref='y2')
                     st.plotly_chart(fig_alertes, use_container_width=True)
 
                     st.markdown("**📋 Détails Actions Requises:**")
@@ -335,31 +374,63 @@ if fichier_conso and fichier_param:
                 st.subheader("📋 Plan Appro + Comparaison MRP")
                 st.dataframe(df_plan.drop('Urgence', axis=1), use_container_width=True, height=400)
 
-                # GRAPHIQUES
+                # GRAPHIQUES - BIN KOL LES MPs
                 st.divider()
                 st.subheader("📈 Analyses")
 
                 tab1, tab2, tab3 = st.tabs(["📊 MRP vs Prévision", "⚠️ Écarts", "🏭 Fournisseurs"])
 
                 with tab1:
-                    df_comp = df_plan[df_plan['Besoin_MRP_kg'] > 0].head(15)
-                    if not df_comp.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Bar(name='MRP Production', x=df_comp['Code_MP'], y=df_comp['Besoin_MRP_kg']))
-                        fig.add_trace(go.Bar(name='Prévision Prophet', x=df_comp['Code_MP'], y=df_comp['Prevision_Prophet_kg']))
-                        fig.update_layout(barmode='group', title="Comparaison Besoins MRP vs Prévision")
-                        st.plotly_chart(fig, use_container_width=True)
+                    # BIN KOLCHI - MACHI GHIR LI FIHOM MRP
+                    df_comp = df_plan.head(15)
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        name='MRP Production',
+                        x=df_comp['Code_MP'],
+                        y=df_comp['Besoin_MRP_kg'],
+                        marker_color='#0066cc',
+                        text=df_comp['Besoin_MRP_kg'].round(0).astype(int).astype(str),
+                        textposition='auto'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='Prévision Prophet',
+                        x=df_comp['Code_MP'],
+                        y=df_comp['Prevision_Prophet_kg'],
+                        marker_color='#66b3ff',
+                        text=df_comp['Prevision_Prophet_kg'].round(0).astype(int).astype(str),
+                        textposition='auto'
+                    ))
+                    fig.update_layout(
+                        barmode='group',
+                        title="Comparaison Besoins MRP vs Prévision - Tous les MPs",
+                        xaxis_title="Code MP",
+                        yaxis_title="Quantité (kg)",
+                        height=450
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 with tab2:
-                    df_ecart = df_plan[df_plan['Ecart_MRP_vs_Prevision'].abs() > 0].nlargest(15, 'Ecart_MRP_vs_Prevision', keep='all')
-                    if not df_ecart.empty:
-                        fig = px.bar(df_ecart, x='Code_MP', y='Ecart_MRP_vs_Prevision', color='Alignement_MRP',
-                                    title="Écarts MRP vs Prévision (kg)",
-                                    color_discrete_map={"✅ ALIGNÉ": "#44ff44", "⚠️ RISQUE": "#ffaa00", "❌ NON ALIGNÉ": "#ff4444"})
-                        st.plotly_chart(fig, use_container_width=True)
+                    # BIN KOLCHI - MACHI GHIR LI FIHOM ÉCART
+                    df_ecart = df_plan.sort_values('Ecart_MRP_vs_Prevision', key=abs, ascending=False).head(15)
+                    fig = px.bar(
+                        df_ecart,
+                        x='Code_MP',
+                        y='Ecart_MRP_vs_Prevision',
+                        color='Alignement_MRP',
+                        title="Écarts MRP vs Prévision (kg) - Tous les MPs",
+                        color_discrete_map={"✅ ALIGNÉ": "#44ff44", "⚠️ RISQUE": "#ffaa00", "❌ NON ALIGNÉ": "#ff4444"},
+                        text='Ecart_MRP_vs_Prevision'
+                    )
+                    fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+                    fig.add_hline(y=0, line_dash="solid", line_color="gray", line_width=2)
+                    fig.update_layout(
+                        xaxis_title="Code MP",
+                        yaxis_title="Écart (MRP - Prophet) kg",
+                        height=450
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 with tab3:
-                    # ✅ TAB3 M9AD - Donut + Détail + Diagnostic
                     df_f_count = df_plan['Fournisseur'].value_counts().reset_index()
                     df_f_count.columns = ['Fournisseur', 'Nb_MP']
 
@@ -375,7 +446,6 @@ if fichier_conso and fichier_param:
                         df_detail = df_plan[['Code_MP', 'Designation', 'Fournisseur', 'Prix_EUR', 'Lead_Time_j']].copy()
                         st.dataframe(df_detail, use_container_width=True, hide_index=True)
 
-                    # Diagnostic MPs sans fournisseur
                     st.divider()
                     mps_sans_fournisseur = []
                     if df_fournisseurs is not None:
@@ -460,7 +530,6 @@ if 'df_resultat' in st.session_state:
                     response += f"**💡 Conclusion:** Logistique **MACHI à jour** m3a Production ⚠️"
                 else:
                     response += f"✅ **PARFAIT!** Logistique **À JOUR** m3a Production 💪\n"
-                    response += f"Kolchi les MPs 3ndhom couverture suffisante."
 
             elif "écart" in prompt_lower or "différence" in prompt_lower:
                 df_ecart = df[df['Ecart_MRP_vs_Prevision'].abs() > 0].sort_values('Ecart_MRP_vs_Prevision', key=abs, ascending=False)
