@@ -5,17 +5,12 @@ from prophet import Prophet
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 
 # ========================================
 # CONFIG
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-st.set_page_config(page_title="MRP Pro Dashboard V4", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="MRP Pro Dashboard V4.1", layout="wide", page_icon="🎯")
 
 # ========================================
 # FONCTIONS UTILITAIRES
@@ -56,17 +51,16 @@ def charger_donnees_google():
         return None, None, None, None
 
 def calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unitaire):
-    """Formule Wilson EOQ"""
     if cout_stockage_unit <= 0 or demande_annuelle <= 0:
         return 0
     eoq = np.sqrt((2 * demande_annuelle * cout_commande) / cout_stockage_unit)
     return eoq
 
 def classification_abc(df):
-    """Classification ABC Pareto 80/20"""
     df = df.sort_values('Valeur_Risque', ascending=False).reset_index(drop=True)
     df['Cumul'] = df['Valeur_Risque'].cumsum()
-    df['Cumul_%'] = df['Cumul'] / df['Valeur_Risque'].sum() * 100
+    total = df['Valeur_Risque'].sum()
+    df['Cumul_%'] = df['Cumul'] / total * 100 if total > 0 else 0
     df['Classe'] = df['Cumul_%'].apply(lambda x: 'A' if x <= 80 else ('B' if x <= 95 else 'C'))
     return df
 
@@ -88,10 +82,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         moq = mp_row.get('moq_kg', 1000)
         cout_unit = mp_row.get('cout_unitaire', 0)
         designation = mp_row.get('designation', 'N/A')
-        cout_commande = mp_row.get('cout_commande', 500) # Coût de passation
-        taux_stockage = mp_row.get('taux_stockage', 0.2) # 20% par an
+        cout_commande = mp_row.get('cout_commande', 500)
+        taux_stockage = mp_row.get('taux_stockage', 0.2)
 
-        # Conso historique
         hist = conso[conso[col_mp_conso] == code].copy()
         hist = hist.dropna(subset=['date', col_qte_conso])
 
@@ -122,22 +115,18 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
                     conso_prevue_30j = conso_moy_j * 30
                     demande_annuelle = conso_moy_j * 365
 
-        # MRP
         besoin_mrp = mrp[mrp[col_mp_mrp] == code][col_qte_mrp].sum()
         besoin_mrp = 0 if pd.isna(besoin_mrp) else besoin_mrp
 
-        # Calculs
         couverture_j = stock_secu / conso_moy_j if conso_moy_j > 0 else 999
         besoin_total = besoin_mrp + conso_prevue_30j
         ecart = stock_secu - besoin_total
         valeur_risque = abs(ecart) * cout_unit if ecart < 0 else 0
 
-        # EOQ
         cout_stockage_unit = cout_unit * taux_stockage
         eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
         point_commande = conso_moy_j * lead_time
 
-        # Statut
         if len(hist) == 0:
             statut = "⚪ PAS DE DONNÉES"
             action = "Vérifier historique conso"
@@ -151,7 +140,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
             statut = "🟢 ALIGNÉ"
             action = "Pas d'action"
 
-        # Fournisseur
         fournis_mp = fournis[fournis[col_mp_fournis] == code].copy()
         if len(fournis_mp) > 0:
             fournis_mp['score'] = (
@@ -193,50 +181,11 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
     df_result = classification_abc(df_result)
     return df_result, forecasts_dict, fournis
 
-def generer_pdf(df):
-    """Génère rapport PDF"""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
-
-    # Titre
-    elements.append(Paragraph("Rapport MRP vs Approvisionnement", styles['Title']))
-    elements.append(Paragraph(f"Date: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
-    elements.append(Spacer(1, 12))
-
-    # Tableau
-    data = [['Code MP', 'Désignation', 'Stock', 'Écart', 'Statut', 'Action']]
-    for _, row in df.iterrows():
-        data.append([
-            row['Code_MP'],
-            row['Désignation'][:20],
-            f"{row['Stock']:,.0f}",
-            f"{row['Écart']:,.0f}",
-            row['Statut'],
-            row['Action'][:30]
-        ])
-
-    t = Table(data)
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    elements.append(t)
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
-
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🎯 MRP Pro Dashboard V4")
-st.caption("Analyse Prédictive + EOQ + ABC + Simulateur What-If + PDF")
+st.title("🎯 MRP Pro Dashboard V4.1")
+st.caption("Analyse Prédictive + EOQ + ABC + Simulateur What-If")
 
 param, conso, mrp, fournis = charger_donnees_google()
 
@@ -254,7 +203,6 @@ if len(df_result) == 0:
     st.warning("Aucun MP dans Param")
     st.stop()
 
-# TABS
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Dashboard", "🏭 Fournisseurs", "📈 Graphiques", "🎯 Simulateur", "💬 Chat IA"])
 
 with tab1:
@@ -270,7 +218,7 @@ with tab1:
 
     col1.metric("📦 Total MPs", total_mp)
     col2.metric("🔴 Critiques", critiques)
-    col3.metric("💎 Classe A", classe_a, "80% valeur")
+    col3.metric("💎 Classe A", classe_a)
     col4.metric("💰 Valeur Risque", f"{valeur_risque_tot:,.0f} MAD")
     col5.metric("📦 EOQ Moy", f"{eoq_moy:,.0f} kg")
     col6.metric("📅 Couv. Moy", f"{couverture_moy:.0f}j")
@@ -294,15 +242,11 @@ with tab1:
         }
     )
 
-    col1, col2 = st.columns(2)
     csv = df_filtre.to_csv(index=False).encode('utf-8-sig')
-    col1.download_button("📥 Télécharger CSV", csv, f"MRP_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
-
-    pdf_buffer = generer_pdf(df_filtre)
-    col2.download_button("📄 Télécharger PDF", pdf_buffer, f"Rapport_MRP_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
+    st.download_button("📥 Télécharger CSV", csv, f"MRP_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
 
 with tab2:
-    st.subheader("🏭 Analyse Fournisseurs - TOUS les fournisseurs")
+    st.subheader("🏭 Analyse Fournisseurs")
     st.write(f"**Total fournisseurs:** {len(df_fournis_all)} | **Actifs:** {len(df_result[df_result['Fournisseur']!= 'N/A']['Fournisseur'].unique())}")
 
     df_fourni_score = df_result[df_result['Fournisseur']!= 'N/A'].groupby('Fournisseur').agg({
@@ -384,7 +328,7 @@ with tab5:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Ex: 'Ch7al EOQ dyal MP_PP?' 'Chno plan commande?'"):
+    if prompt := st.chat_input("Ex: 'EOQ dyal MP_PP?' 'Plan commande?'"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
