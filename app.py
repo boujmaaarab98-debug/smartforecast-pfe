@@ -244,19 +244,16 @@ if fichier_conso and fichier_param:
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
-                # STR 1 - FINANCIER
                 col1, col2, col3 = st.columns(3)
                 col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR", help="Total à commander maintenant")
                 col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR", help="Stock immobilisé actuellement")
                 col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
 
-                # STR 2 - PERFORMANCE STOCK
                 col4, col5, col6 = st.columns(3)
                 col4.metric("🔄 Taux Rotation", f"{kpis_globaux['taux_rotation_pct']:.0f}%", help="Objectif: >200% = Excellent")
                 col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
                 col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
 
-                # STR 3 - RISQUES & ALIGNEMENT
                 col7, col8, col9 = st.columns(3)
                 col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture", delta_color="inverse")
                 col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="Risque arrêt production", delta_color="inverse")
@@ -265,16 +262,59 @@ if fichier_conso and fichier_param:
                            delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
                            help="Alignement avec Production")
 
-                # ALERTES
+                # ALERTES - GRAPHIQUE 3IWAD TEXTE
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
                 if len(df_non_aligne) > 0:
                     st.divider()
                     st.subheader("🚨 ALERTES: MPs Non Alignées avec Production")
-                    for _, row in df_non_aligne.iterrows():
-                        st.error(f"🔴 **{row['Code_MP']} - {row['Designation']}**\n"
-                                f"MRP demande: {row['Besoin_MRP_kg']:.0f}kg | Stock: {row['Stock_Actuel_kg']:.0f}kg | "
-                                f"Couverture: {row['Couverture_j']:.0f}j < Lead Time: {row['Lead_Time_j']:.0f}j\n"
-                                f"**ACTION:** Commander {row['QTE_A_COMMANDER_kg']:.0f}kg MAINTENANT → Risque arrêt production!")
+
+                    # Graphique Bar: Couverture vs Lead Time
+                    fig_alertes = go.Figure()
+
+                    # Bar Couverture
+                    fig_alertes.add_trace(go.Bar(
+                        x=df_non_aligne['Code_MP'],
+                        y=df_non_aligne['Couverture_j'],
+                        name='Couverture Actuelle',
+                        marker_color='#ff4444',
+                        text=df_non_aligne['Couverture_j'].round(1).astype(str) + 'j',
+                        textposition='auto',
+                    ))
+
+                    # Ligne Lead Time
+                    fig_alertes.add_trace(go.Scatter(
+                        x=df_non_aligne['Code_MP'],
+                        y=df_non_aligne['Lead_Time_j'],
+                        name='Lead Time Requis',
+                        mode='lines+markers',
+                        line=dict(color='#000', width=3, dash='dash'),
+                        marker=dict(size=10, color='#000000'),
+                    ))
+
+                    fig_alertes.update_layout(
+                        title="⚠️ Couverture Stock vs Lead Time Fournisseur",
+                        xaxis_title="Code MP",
+                        yaxis_title="Jours",
+                        barmode='group',
+                        height=400,
+                        showlegend=True,
+                        hovermode='x unified'
+                    )
+
+                    # Zone critique
+                    fig_alertes.add_hline(y=0, line_dash="solid", line_color="red",
+                                         annotation_text="RISQUE ARRÊT PRODUCTION",
+                                         annotation_position="top right")
+
+                    st.plotly_chart(fig_alertes, use_container_width=True)
+
+                    # Détails en tableau
+                    st.markdown("**📋 Détails Actions Requises:**")
+                    df_details = df_non_aligne[['Code_MP', 'Designation', 'Besoin_MRP_kg', 'Stock_Actuel_kg',
+                                               'Couverture_j', 'Lead_Time_j', 'QTE_A_COMMANDER_kg']].copy()
+                    df_details.columns = ['Code', 'Désignation', 'Besoin MRP (kg)', 'Stock (kg)',
+                                         'Couverture (j)', 'Lead Time (j)', 'À COMMANDER (kg)']
+                    st.dataframe(df_details, use_container_width=True, hide_index=True)
 
                 # TABLEAU
                 st.divider()
@@ -332,9 +372,7 @@ if fichier_conso and fichier_param:
         st.success(f"✅ Plan sauvegardé!")
         st.rerun()
 
-# ============================================
 # CHAT IA - BOUTON KAY MSA7 GHIR CHAT
-# ============================================
 if 'df_resultat' in st.session_state:
     st.divider()
 
@@ -343,7 +381,7 @@ if 'df_resultat' in st.session_state:
         st.header("🧠 Assistant MRP ↔ Appro")
     with col_clear_btn:
         if st.button("🗑️ Effacer Chat", use_container_width=True, type="secondary"):
-            st.session_state['messages'] = [] # Msa7 ghir chat
+            st.session_state['messages'] = []
 
     if len(st.session_state['messages']) == 0:
         st.session_state['messages'].append({
