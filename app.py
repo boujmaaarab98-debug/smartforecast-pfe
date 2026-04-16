@@ -235,24 +235,30 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs - KOLCHI F LIGNE WE7DA
+                # DASHBOARD KPIs - 3 × 3 = 9 KPIs WADH7IN
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
-                col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns(9)
+                # STR 1 - FINANCIER
+                col1, col2, col3 = st.columns(3)
+                col1.metric("💰 Budget Commande", f"{kpis_globaux['cout_total_commande']:,.0f} EUR", help="Total à commander maintenant")
+                col2.metric("📦 Valeur Stock", f"{kpis_globaux['valeur_stock_total']:,.0f} EUR", help="Stock immobilisé actuellement")
+                col3.metric("💸 Coût Possession", f"{kpis_globaux['cout_total_possession']:,.0f} EUR/an", help="20% de la valeur stock")
 
-                col1.metric("💰 Budget", f"{kpis_globaux['cout_total_commande']:,.0f}", help="Total commandes")
-                col2.metric("📦 Stock", f"{kpis_globaux['valeur_stock_total']:,.0f}", help="Valeur stock immobilisé")
-                col3.metric("🔄 Rotation", f"{kpis_globaux['rotation_moyenne']:.1f}x", help="Rotation moyenne /an")
-                col4.metric("📅 Couverture", f"{kpis_globaux['couverture_moyenne']:.0f}j", help="Jours de stock moyens")
-                col5.metric("✅ Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
-                col6.metric("💸 Possession", f"{kpis_globaux['cout_total_possession']:,.0f}", help="Coût stock /an")
-                col7.metric("⚠️ Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture")
-                col8.metric("🔴 Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="MPs risque rupture", delta_color="inverse")
+                # STR 2 - PERFORMANCE STOCK
+                col4, col5, col6 = st.columns(3)
+                col4.metric("🔄 Rotation Moyenne", f"{kpis_globaux['rotation_moyenne']:.1f}x/an", help="Objectif: 12x/an")
+                col5.metric("📅 Couverture Moy", f"{kpis_globaux['couverture_moyenne']:.0f} jours", help="Objectif: 30 jours")
+                col6.metric("✅ Taux Service", f"{kpis_globaux['taux_service_global']:.1f}%", help="Commandes satisfaites")
+
+                # STR 3 - RISQUES & ALIGNEMENT
+                col7, col8, col9 = st.columns(3)
+                col7.metric("⚠️ Taux Rupture", f"{kpis_globaux['taux_rupture_moyen']:.1f}%", help="Historique rupture", delta_color="inverse")
+                col8.metric("🔴 MP Critiques", f"{kpis_globaux['nb_mp_critiques']}", help="Risque arrêt production", delta_color="inverse")
                 col9.metric("🎯 Aligné MRP", f"{kpis_globaux['taux_alignement_mrp']:.0f}%",
                            delta=f"{kpis_globaux['nb_non_alignes']} non alignés" if kpis_globaux['nb_non_alignes'] > 0 else "✓ Parfait",
                            delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
-                           help="Alignement Production")
+                           help="Alignement avec Production")
 
                 # ALERTES
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
