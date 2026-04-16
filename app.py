@@ -169,6 +169,8 @@ if fichier_conso and fichier_param:
                     jours_rupture = len(df_mp[df_mp[col_qte_conso] > stock_actuel])
                     taux_rupture = (jours_rupture / len(df_mp) * 100) if len(df_mp) > 0 else 0
                     rotation = conso_annuelle / stock_actuel if stock_actuel > 0 else 0
+                    # TAUX ROTATION EN % = Rotation × 100
+                    taux_rotation_pct = min(rotation * 100, 999)
                     cout_possession = stock_actuel * prix_optimal * TAUX_POSSESSION_ANNUEL
 
                     if couverture_jours < lead_optimal:
@@ -201,7 +203,7 @@ if fichier_conso and fichier_param:
                         'Lead_Time_j': lead_optimal,
                         'Cout_Commande_EUR': round(qte_commander * prix_optimal, 2),
                         'Couverture_j': round(couverture_jours, 1),
-                        'Rotation_x/an': round(rotation, 2),
+                        'Taux_Rotation_%': round(taux_rotation_pct, 1), # 👈 BDLNA HNA
                         'Taux_Rupture_%': round(taux_rupture, 1),
                         'Cout_Possession_EUR/an': round(cout_possession, 2),
                         'Date_Commande': date_commande.strftime('%Y-%m-%d'),
@@ -217,13 +219,10 @@ if fichier_conso and fichier_param:
             if resultats_globaux:
                 df_plan = pd.DataFrame(resultats_globaux).sort_values('Urgence', ascending=False)
 
-                taux_rotation_pct = (df_plan['Rotation_x/an'].mean() * 100) if df_plan['Rotation_x/an'].mean() < 10 else min(df_plan['Rotation_x/an'].mean() * 100, 999)
-
                 kpis_globaux = {
                     'cout_total_commande': df_plan['Cout_Commande_EUR'].sum(),
                     'valeur_stock_total': (df_plan['Stock_Actuel_kg'] * df_plan['Prix_EUR']).sum(),
-                    'rotation_moyenne': df_plan['Rotation_x/an'].mean(),
-                    'taux_rotation_pct': taux_rotation_pct,
+                    'taux_rotation_pct': df_plan['Taux_Rotation_%'].mean(),
                     'couverture_moyenne': df_plan['Couverture_j'].mean(),
                     'taux_service_global': 100 - df_plan['Taux_Rupture_%'].mean(),
                     'cout_total_possession': df_plan['Cout_Possession_EUR/an'].sum(),
@@ -239,7 +238,7 @@ if fichier_conso and fichier_param:
 
                 st.success(f"✅ Analyse Complète!")
 
-                # DASHBOARD KPIs
+                # DASHBOARD KPIs - TAUX ROTATION
                 st.divider()
                 st.subheader("📊 KPIs Supply Chain - Vue Globale")
 
@@ -261,16 +260,14 @@ if fichier_conso and fichier_param:
                            delta_color="inverse" if kpis_globaux['nb_non_alignes'] > 0 else "normal",
                            help="Alignement avec Production")
 
-                # ALERTES - GRAPHIQUE M3A STOCK + COUVERTURE + LEAD TIME
+                # ALERTES - GRAPHIQUE M3A STOCK
                 df_non_aligne = df_plan[df_plan['Alignement_MRP'] == "❌ NON ALIGNÉ"]
                 if len(df_non_aligne) > 0:
                     st.divider()
                     st.subheader("🚨 ALERTES: MPs Non Alignées avec Production")
 
-                    # Graphique avec 2 axes Y
                     fig_alertes = go.Figure()
 
-                    # Bar 1: Stock Actuel (kg) - Axe Y Gauche
                     fig_alertes.add_trace(go.Bar(
                         x=df_non_aligne['Code_MP'],
                         y=df_non_aligne['Stock_Actuel_kg'],
@@ -282,7 +279,6 @@ if fichier_conso and fichier_param:
                         offsetgroup=1
                     ))
 
-                    # Bar 2: Couverture (jours) - Axe Y Droit
                     fig_alertes.add_trace(go.Bar(
                         x=df_non_aligne['Code_MP'],
                         y=df_non_aligne['Couverture_j'],
@@ -294,7 +290,6 @@ if fichier_conso and fichier_param:
                         offsetgroup=2
                     ))
 
-                    # Ligne Lead Time
                     fig_alertes.add_trace(go.Scatter(
                         x=df_non_aligne['Code_MP'],
                         y=df_non_aligne['Lead_Time_j'],
@@ -308,17 +303,8 @@ if fichier_conso and fichier_param:
                     fig_alertes.update_layout(
                         title="⚠️ Stock vs Couverture vs Lead Time",
                         xaxis=dict(title="Code MP"),
-                        yaxis=dict(
-                            title="Stock (kg)",
-                            side='left',
-                            showgrid=False
-                        ),
-                        yaxis2=dict(
-                            title="Jours",
-                            side='right',
-                            overlaying='y',
-                            showgrid=True
-                        ),
+                        yaxis=dict(title="Stock (kg)", side='left', showgrid=False),
+                        yaxis2=dict(title="Jours", side='right', overlaying='y', showgrid=True),
                         barmode='group',
                         height=450,
                         hovermode='x unified',
@@ -331,7 +317,6 @@ if fichier_conso and fichier_param:
 
                     st.plotly_chart(fig_alertes, use_container_width=True)
 
-                    # Détails en tableau
                     st.markdown("**📋 Détails Actions Requises:**")
                     df_details = df_non_aligne[['Code_MP', 'Designation', 'Besoin_MRP_kg', 'Stock_Actuel_kg',
                                                'Couverture_j', 'Lead_Time_j', 'QTE_A_COMMANDER_kg']].copy()
@@ -339,7 +324,7 @@ if fichier_conso and fichier_param:
                                          'Couverture (j)', 'Lead Time (j)', 'À COMMANDER (kg)']
                     st.dataframe(df_details, use_container_width=True, hide_index=True)
 
-                # TABLEAU
+                # TABLEAU - TAUX ROTATION %
                 st.divider()
                 st.subheader("📋 Plan Appro + Comparaison MRP")
                 st.dataframe(df_plan.drop('Urgence', axis=1), use_container_width=True, height=400)
