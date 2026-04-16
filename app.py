@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # CONFIG
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-st.set_page_config(page_title="MRP Pro Dashboard V4.1", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="MRP Pro Dashboard V4.2", layout="wide", page_icon="🎯")
 
 # ========================================
 # FONCTIONS UTILITAIRES
@@ -184,8 +184,8 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🎯 MRP Pro Dashboard V4.1")
-st.caption("Analyse Prédictive + EOQ + ABC + Simulateur What-If")
+st.title("🎯 MRP Pro Dashboard V4.2")
+st.caption("Analyse Prédictive + EOQ + ABC + Simulateur What-If Visuel")
 
 param, conso, mrp, fournis = charger_donnees_google()
 
@@ -294,29 +294,97 @@ with tab3:
             st.plotly_chart(fig2, use_container_width=True)
 
 with tab4:
-    st.subheader("🎯 Simulateur What-If")
-    st.caption("Tester l'impact d'une commande avant de la passer")
+    st.subheader("🎯 Simulateur What-If - VERSION VISUELLE")
+    st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
     col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique())
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000)
+    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v2")
+    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v2")
 
     mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0]
     nouveau_stock = mp_data_sim['Stock'] + qte_sim
     nouveau_ecart = nouveau_stock - (mp_data_sim['Besoin_MRP'] + mp_data_sim['Conso_30j'])
     nouvelle_couv = nouveau_stock / mp_data_sim['Conso_Moy_J'] if mp_data_sim['Conso_Moy_J'] > 0 else 999
 
-    col3.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"{qte_sim:,.0f}")
+    # 🔥 GRAPHIQUE 1: STOCK
+    st.divider()
+    st.subheader(f"📊 Impact Visuel - {mp_sim}")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg", f"{nouveau_ecart - mp_data_sim['Écart']:,.0f}")
-    col2.metric("Nouvelle Couverture", f"{nouvelle_couv:.0f} jours", f"{nouvelle_couv - mp_data_sim['Couverture_J']:.0f}")
-    col3.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
+    col_g1, col_g2, col_g3 = st.columns(3)
 
+    with col_g1:
+        fig_stock = go.Figure()
+        fig_stock.add_trace(go.Bar(
+            x=['Stock Actuel', 'Après Commande'],
+            y=[mp_data_sim['Stock'], nouveau_stock],
+            marker_color=['#FF6B6B', '#4ECDC4'],
+            text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
+            textposition='auto',
+        ))
+        fig_stock.update_layout(
+            title="📦 Stock (kg)",
+            yaxis_title="Kg",
+            showlegend=False,
+            height=300
+        )
+        st.plotly_chart(fig_stock, use_container_width=True)
+
+    with col_g2:
+        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
+        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
+        fig_ecart = go.Figure()
+        fig_ecart.add_trace(go.Bar(
+            x=['Écart Actuel', 'Après Commande'],
+            y=[mp_data_sim['Écart'], nouveau_ecart],
+            marker_color=[color_avant, color_apres],
+            text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"],
+            textposition='auto',
+        ))
+        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
+        fig_ecart.update_layout(
+            title="⚖️ Écart (kg)",
+            yaxis_title="Kg",
+            showlegend=False,
+            height=300
+        )
+        st.plotly_chart(fig_ecart, use_container_width=True)
+
+    with col_g3:
+        color_couv_avant = '#FF6B6B' if mp_data_sim['Couverture_J'] < 7 else '#FFA500' if mp_data_sim['Couverture_J'] < 14 else '#4ECDC4'
+        color_couv_apres = '#FF6B6B' if nouvelle_couv < 7 else '#FFA500' if nouvelle_couv < 14 else '#4ECDC4'
+        fig_couv = go.Figure()
+        fig_couv.add_trace(go.Bar(
+            x=['Couv. Actuelle', 'Après Commande'],
+            y=[mp_data_sim['Couverture_J'], nouvelle_couv],
+            marker_color=[color_couv_avant, color_couv_apres],
+            text=[f"{mp_data_sim['Couverture_J']:.0f}j", f"{nouvelle_couv:.0f}j"],
+            textposition='auto',
+        ))
+        fig_couv.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Critique")
+        fig_couv.add_hline(y=14, line_dash="dash", line_color="orange", annotation_text="Tension")
+        fig_couv.update_layout(
+            title="📅 Couverture (jours)",
+            yaxis_title="Jours",
+            showlegend=False,
+            height=300
+        )
+        st.plotly_chart(fig_couv, use_container_width=True)
+
+    # KPIs
+    st.divider()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"+{qte_sim:,.0f}")
+    col2.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg", f"{nouveau_ecart - mp_data_sim['Écart']:,.0f}")
+    col3.metric("Nouvelle Couverture", f"{nouvelle_couv:.0f} jours", f"{nouvelle_couv - mp_data_sim['Couverture_J']:.0f}")
+    col4.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
+
+    # Verdict
     if nouveau_ecart >= 0:
-        st.success(f"✅ Avec {qte_sim:,.0f} kg, **{mp_sim} passe en ALIGNÉ**. Plus de risque!")
+        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**! Couverture {nouvelle_couv:.0f} jours. Plus de risque! 🎉")
+    elif nouveau_ecart >= -mp_data_sim['EOQ']:
+        st.warning(f"🟠 **VERDICT: TENSION** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
     else:
-        st.warning(f"⚠️ Avec {qte_sim:,.0f} kg, **{mp_sim} reste en TENSION**. Il faut {abs(nouveau_ecart):,.0f} kg de plus.")
+        st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda!")
 
 with tab5:
     st.subheader("💬 Chat IA Pro")
