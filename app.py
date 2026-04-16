@@ -325,19 +325,19 @@ if fichier_conso and fichier_param:
         st.rerun()
 
 # ============================================
-# CHAT IA M3A BOUTON EFFACER HISTORIQUE
+# CHAT IA M3A BOUTON EFFACER - KAY MSA7 GHIR CHAT
 # ============================================
 if 'df_resultat' in st.session_state:
     st.divider()
 
-    # TITRE + BOUTON EFFACER - HADA HWA L BOUTON A BTAL!
+    # TITRE + BOUTON EFFACER CHAT BOHDO
     col_chat_title, col_clear_btn = st.columns([4, 1])
     with col_chat_title:
         st.header("🧠 Assistant MRP ↔ Appro")
     with col_clear_btn:
         if st.button("🗑️ Effacer Chat", use_container_width=True, type="secondary"):
-            st.session_state['messages'] = []
-            st.rerun()
+            st.session_state['messages'] = [] # 👈 MSA7 GHIR CHAT
+            # Ma ndirouch st.rerun() bach ma n-reset-iwch data
 
     # Message bienvenue ila l chat khawi
     if len(st.session_state['messages']) == 0:
