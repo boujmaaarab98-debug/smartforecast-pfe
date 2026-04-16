@@ -49,7 +49,7 @@ def charger_donnees_google():
         return param, conso, mrp, fournis
     except Exception as e:
         st.error(f"❌ Erreur: {e}")
-        return None, None, None
+        return None, None, None, None
 
 def calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unitaire):
     if cout_stockage_unit <= 0 or demande_annuelle <= 0:
@@ -75,11 +75,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
     resultats = []
     forecasts_dict = {}
-    previsions_mensuelles = {}
 
-    # Date dyal lyoma
+    # 🔥 ROLLING 12 MOIS: Akhd ghir akhr 12 chehar mn lyoma
     date_actuelle = datetime.now().date()
-    # Khod akhr 12 chehar mn lyoma
     date_12_mois = date_actuelle - relativedelta(months=12)
 
     for _, mp_row in param.iterrows():
@@ -92,7 +90,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         cout_commande = mp_row.get('cout_commande', 500)
         taux_stockage = mp_row.get('taux_stockage', 0.2)
 
-        # 🔥 ROLLING: Khod ghir akhr 12 chehar
+        # 🔥 ROLLING: Ghir akhr 12 chehar
         hist = conso[(conso[col_mp_conso] == code) & (conso['date'].dt.date >= date_12_mois)].copy()
         hist = hist.dropna(subset=['date', col_qte_conso])
 
@@ -115,11 +113,8 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
                 try:
                     m = Prophet(yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=False)
                     m.fit(df_prophet)
-                    # Forecast 90 jours = 3 chhour
                     future = m.make_future_dataframe(periods=90)
                     forecast = m.predict(future)
-
-                    # Prévisions mensuelles
                     fc_future = forecast[forecast['ds'].dt.date > date_actuelle].copy()
                     if len(fc_future) >= 90:
                         prevision_m1 = fc_future.head(30)['yhat'].sum()
@@ -135,9 +130,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
                     forecasts_dict[code] = forecast
                     has_forecast = True
 
-                    # 🔥 IA: Calcul Date Rupture - MHM: Ila stock négatif ra rupture daba
+                    # 🔥 IA: Date Rupture
                     if stock_secu <= 0:
-                        date_rupture = datetime.now().date()
+                        date_rupture = date_actuelle
                         risque_pct = 100
                     else:
                         stock_simule = stock_secu
@@ -176,10 +171,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         statut_ia = "✅ Sécurisé"
 
         if ecart < 0:
-            # Ila négatif = DIMA urgent
             risque_pct = 100
             date_rupture = date_actuelle
-            date_cmd_optimale = date_actuelle # Commandi daba
+            date_cmd_optimale = date_actuelle
             qte_suggeree_ia = max(abs(ecart), eoq, moq)
             statut_ia = "🔴 Urgent"
         elif date_rupture:
@@ -393,7 +387,6 @@ with tab3:
 
     df_prev = df_result[['Code_MP', 'Désignation', 'Prév_M+1', 'Prév_M+2', 'Prév_M+3', 'Conso_Moy_J']].copy()
 
-    # Calculer nom dyal chhoura
     mois1 = (datetime.now() + relativedelta(months=1)).strftime('%b %Y')
     mois2 = (datetime.now() + relativedelta(months=2)).strftime('%b %Y')
     mois3 = (datetime.now() + relativedelta(months=3)).strftime('%b %Y')
@@ -417,7 +410,6 @@ with tab3:
         }
     )
 
-    # Graphique évolution
     mp_select_prev = st.selectbox("Choisir MP pour voir évolution", df_result['Code_MP'].unique())
     mp_data_prev = df_result[df_result['Code_MP'] == mp_select_prev].iloc[0]
 
@@ -425,7 +417,7 @@ with tab3:
     fig_prev.add_trace(go.Bar(
         x=[mois1, mois2, mois3],
         y=[mp_data_prev['Prév_M+1'], mp_data_prev['Prév_M+2'], mp_data_prev['Prév_M+3']],
-        marker_color=['#4ECDC4', '#FFA500', '#FF6B'],
+        marker_color=['#4ECDC4', '#FFA500', '#FF6B6B'],
         text=[f"{mp_data_prev['Prév_M+1']:,.0f}", f"{mp_data_prev['Prév_M+2']:,.0f}", f"{mp_data_prev['Prév_M+3']:,.0f}"],
         textposition='auto'
     ))
@@ -465,8 +457,8 @@ with tab5:
     st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
     col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v4")
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v4")
+    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v5")
+    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v5")
 
     mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0]
     nouveau_stock = mp_data_sim['Stock'] + qte_sim
@@ -483,7 +475,7 @@ with tab5:
         fig_stock.add_trace(go.Bar(
             x=['Stock Actuel', 'Après Commande'],
             y=[mp_data_sim['Stock'], nouveau_stock],
-            marker_color=['#FF6B', '#4ECDC4'],
+            marker_color=['#FF6B6B', '#4ECDC4'],
             text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
             textposition='auto',
         ))
@@ -572,9 +564,22 @@ with tab6:
                     response = f"**Prévisions {mp}:**\n- {mois1}: {row['Prév_M+1']:,.0f} kg\n- {mois2}: {row['Prév_M+2']:,.0f} kg\n- {mois3}: {row['Prév_M+3']:,.0f} kg\n\n💡 Basé 3la akhr 12 chehar"
                     break
             if not response:
-                response = "**Prévisions 3 Mois:**\n" + "\n".join([f"- {r['Code_MP']}: {r['Prév_M+1']:,.0f} kg" for _, r in df_result.nlargest(5, 'Prév_M+1').iterrows()])
+                response = "**Prévisions M+1:**\n" + "\n".join([f"- {r['Code_MP']}: {r['Prév_M+1']:,.0f} kg" for _, r in df_result.nlargest(5, 'Prév_M+1').iterrows()])
 
         elif "risque" in prompt_lower or "rupture" in prompt_lower:
             df_risk = df_result[df_result['Risque_%'] > 0].sort_values('Risque_%', ascending=False)
             if len(df_risk) > 0:
-                response = f"⚠️ **{len(df_risk)} MPs avec
+                # 🔥 FIX: F-string mzian
+                response = f"⚠️ **{len(df_risk)} MPs avec risque de rupture:**\n\n"
+                for _, row in df_risk.head(5).iterrows():
+                    date_str = row['Date_Rupture_Prévue'].strftime('%d/%m/%Y') if pd.notna(row['Date_Rupture_Prévue']) else 'N/A'
+                    response += f"- **{row['Code_MP']}**: Risque {row['Risque_%']:.0f}% | Rupture prévue {date_str}\n"
+            else:
+                response = "✅ Aucun risque de rupture détecté par l'IA!"
+
+        else:
+            response = f"**Questions dispo:**\n- 'Plan commande?' - Calendrier commandes optimales\n- 'Prévision MP_PP?' - Conso 3 chhour\n- 'Risque rupture?' - MPs en danger\n- 'ABC?' - Classification Pareto\n\n**MPs:** {', '.join(df_result['Code_MP'].tolist())}"
+
+        with st.chat_message("assistant"):
+            st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
