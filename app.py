@@ -49,7 +49,7 @@ def charger_donnees_google():
         return param, conso, mrp, fournis
     except Exception as e:
         st.error(f"❌ Erreur: {e}")
-        return None, None, None, None
+        return None, None
 
 def calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unitaire):
     if cout_stockage_unit <= 0 or demande_annuelle <= 0:
@@ -642,5 +642,4 @@ with tab6:
         prompt_lower = prompt.lower()
         response = ""
 
-        if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale
+        if "plan" in prompt_lower or "commande" in prompt_lower
