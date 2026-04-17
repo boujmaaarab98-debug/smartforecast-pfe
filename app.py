@@ -483,15 +483,14 @@ with tab4:
             st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("💰 Valeur Commandes à Passer par Fournisseur")
+    st.subheader("📦 Quantité Commandes à Passer par Fournisseur")
 
     nb_jours = st.slider("Chouf les commandes dyal ch7al mn jour l9ddam:", 30, 180, 90, step=30)
 
     date_limite = datetime.now().date() + timedelta(days=nb_jours)
     df_cmd_fourni = df_result[
         (df_result['Date_Cmd_Optimale'].notna()) &
-        (df_result['Date_Cmd_Optimale'] <= date_limite) &
-        (df_result['Statut_IA'].str.contains('Urgent|À Planifier', na=False))
+        (df_result['Date_Cmd_Optimale'] <= date_limite)
     ].copy()
 
     if len(df_cmd_fourni) > 0:
@@ -501,30 +500,30 @@ with tab4:
             'Qté_Suggérée_IA': 'sum',
             'Code_MP': 'count'
         }).reset_index().rename(columns={'Code_MP': 'Nb_MPs_À_Cmd', 'Qté_Suggérée_IA': 'Qté_Totale_kg'})
-        df_valeur_fourni = df_valeur_fourni.sort_values('Valeur_Cmd', ascending=False)
+        df_valeur_fourni = df_valeur_fourni.sort_values('Qté_Totale_kg', ascending=False)
 
         col1, col2 = st.columns(2)
         with col1:
             fig_val = px.bar(
                 df_valeur_fourni,
                 x='Fournisseur',
-                y='Valeur_Cmd',
-                title=f"Valeur Commandes - {nb_jours} jours",
-                color='Valeur_Cmd',
-                color_continuous_scale='Reds',
+                y='Qté_Totale_kg',
+                title=f"Quantité Commandes - {nb_jours} jours",
+                color='Qté_Totale_kg',
+                color_continuous_scale='Blues',
                 text='Nb_MPs_À_Cmd',
-                labels={'Valeur_Cmd': 'Valeur (MAD)', 'Nb_MPs_À_Cmd': 'Nb MPs'}
+                labels={'Qté_Totale_kg': 'Quantité (kg)', 'Nb_MPs_À_Cmd': 'Nb MPs'}
             )
             fig_val.update_traces(texttemplate='%{text} MPs', textposition='outside')
-            fig_val.update_layout(yaxis_title="Valeur Commande (MAD)")
+            fig_val.update_layout(yaxis_title="Quantité Commande (kg)")
             st.plotly_chart(fig_val, use_container_width=True)
 
         with col2:
             fig_pie_cmd = px.pie(
                 df_valeur_fourni,
-                values='Valeur_Cmd',
+                values='Qté_Totale_kg',
                 names='Fournisseur',
-                title=f"Répartition Valeur - {nb_jours} jours",
+                title=f"Répartition Quantité - {nb_jours} jours",
                 hole=0.4
             )
             st.plotly_chart(fig_pie_cmd, use_container_width=True)
@@ -542,7 +541,7 @@ with tab4:
             }
         )
 
-        st.metric("💰 Total Commandes", f"{df_valeur_fourni['Valeur_Cmd'].sum():,.0f} MAD", f"{nb_jours} jours")
+        st.metric("📦 Total Quantité", f"{df_valeur_fourni['Qté_Totale_kg'].sum():,.0f} kg", f"{nb_jours} jours")
     else:
         st.success(f"✅ Aucune commande prévue f {nb_jours} jours l9ddam!")
 
@@ -573,7 +572,7 @@ with tab5:
         fig_stock.add_trace(go.Bar(
             x=['Stock Actuel', 'Après Commande'],
             y=[mp_data_sim['Stock'], nouveau_stock],
-            marker_color=['#FF6B6B', '#4ECDC4'],
+            marker_color=['#FF6B', '#4ECDC4'],
             text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
             textposition='auto',
         ))
@@ -582,7 +581,7 @@ with tab5:
 
     with col_g2:
         color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
+        color_apres = '#FF6B' if nouveau_ecart < 0 else '#4ECDC4'
         fig_ecart = go.Figure()
         fig_ecart.add_trace(go.Bar(
             x=['Écart Actuel', 'Après Commande'],
@@ -644,4 +643,9 @@ with tab6:
         response = ""
 
         if "plan" in prompt_lower or "commande" in prompt_lower:
-            df
+            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
+            if len(df_cmd) > 0:
+                response = f"📅 **Plan Commande IA - {len(df_cmd)} MPs:**\n\n"
+                for _, row in df_cmd.head(10).iterrows():
+                    date_str = row['Date_Cmd_Optimale'].strftime('%d/%m')
+                    response += f"**{date_str}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg chez {row['Fournisseur']} ({row['Statut_IA']})\n
