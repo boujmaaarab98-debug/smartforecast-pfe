@@ -486,6 +486,73 @@ with tab4:
             fig2 = px.pie(df_fourni_score, values='Valeur_Risque', names='Fournisseur', title="Valeur à Risque")
             st.plotly_chart(fig2, use_container_width=True)
 
+    # 🔥 JDID: GRAPHIQUE VALEUR COMMANDES PAR FOURNISSEUR
+    st.divider()
+    st.subheader("💰 Valeur Commandes à Passer par Fournisseur")
+
+    nb_jours = st.slider("Chouf les commandes dyal ch7al mn jour l9ddam:", 30, 180, 90, step=30)
+
+    date_limite = datetime.now().date() + timedelta(days=nb_jours)
+    df_cmd_fourni = df_result[
+        (df_result['Date_Cmd_Optimale'].notna()) &
+        (df_result['Date_Cmd_Optimale'] <= date_limite) &
+        (df_result['Statut_IA'].str.contains('Urgent|À Planifier', na=False))
+    ].copy()
+
+    if len(df_cmd_fourni) > 0:
+        df_cmd_fourni['Valeur_Cmd'] = df_cmd_fourni['Qté_Suggérée_IA'] * df_cmd_fourni['Cout_Unit']
+        df_valeur_fourni = df_cmd_fourni.groupby('Fournisseur').agg({
+            'Valeur_Cmd': 'sum',
+            'Qté_Suggérée_IA': 'sum',
+            'Code_MP': 'count'
+        }).reset_index().rename(columns={'Code_MP': 'Nb_MPs_À_Cmd', 'Qté_Suggérée_IA': 'Qté_Totale_kg'})
+        df_valeur_fourni = df_valeur_fourni.sort_values('Valeur_Cmd', ascending=False)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            fig_val = px.bar(
+                df_valeur_fourni,
+                x='Fournisseur',
+                y='Valeur_Cmd',
+                title=f"Valeur Commandes - {nb_jours} jours",
+                color='Valeur_Cmd',
+                color_continuous_scale='Reds',
+                text='Nb_MPs_À_Cmd',
+                labels={'Valeur_Cmd': 'Valeur (MAD)', 'Nb_MPs_À_Cmd': 'Nb MPs'}
+            )
+            fig_val.update_traces(texttemplate='%{text} MPs', textposition='outside')
+            fig_val.update_layout(yaxis_title="Valeur Commande (MAD)")
+            st.plotly_chart(fig_val, use_container_width=True)
+
+        with col2:
+            fig_pie_cmd = px.pie(
+                df_valeur_fourni,
+                values='Valeur_Cmd',
+                names='Fournisseur',
+                title=f"Répartition Valeur - {nb_jours} jours",
+                hole=0.4
+            )
+            st.plotly_chart(fig_pie_cmd, use_container_width=True)
+
+        st.dataframe(
+            df_valeur_fourni.rename(columns={
+                'Valeur_Cmd': 'Valeur Commande (MAD)',
+                'Qté_Totale_kg': 'Qté Totale (kg)',
+                'Nb_MPs_À_Cmd': 'Nb MPs'
+            }),
+            use_container_width=True,
+            column_config={
+                'Valeur Commande (MAD)': st.column_config.NumberColumn(format="%.0f"),
+                'Qté Totale (kg)': st.column_config.NumberColumn(format="%.0f")
+            }
+        )
+
+        st.metric("💰 Total Commandes", f"{df_valeur_fourni['Valeur_Cmd'].sum():,.0f} MAD", f"{nb_jours} jours")
+    else:
+        st.success(f"✅ Aucune commande prévue f {nb_jours} jours l9ddam!")
+
+    st.divider()
+    st.subheader("📋 Détail Tous Fournisseurs")
     st.dataframe(df_fournis_all, use_container_width=True)
 
 with tab5:
@@ -586,35 +653,4 @@ with tab6:
             if len(df_cmd) > 0:
                 response = f"📅 **Plan Commande IA - {len(df_cmd)} MPs:**\n\n"
                 for _, row in df_cmd.head(10).iterrows():
-                    response += f"**{row['Date_Cmd_Optimale'].strftime('%d/%m')}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg chez {row['Fournisseur']} ({row['Statut_IA']})\n"
-            else:
-                response = "✅ Aucune commande à planifier. Kolchi sécurisé!"
-
-        elif "prévision" in prompt_lower or "prevision" in prompt_lower:
-            for mp in df_result['Code_MP'].unique():
-                if mp.lower() in prompt_lower:
-                    row = df_result[df_result['Code_MP'] == mp].iloc[0]
-                    mois1 = (datetime.now() + relativedelta(months=1)).strftime('%b %Y')
-                    mois2 = (datetime.now() + relativedelta(months=2)).strftime('%b %Y')
-                    mois3 = (datetime.now() + relativedelta(months=3)).strftime('%b %Y')
-                    response = f"**Prévisions {mp}:**\n- {mois1}: {row['Prév_M+1']:,.0f} kg\n- {mois2}: {row['Prév_M+2']:,.0f} kg\n- {mois3}: {row['Prév_M+3']:,.0f} kg\n\n💡 Basé 3la akhr 12 chehar"
-                    break
-            if not response:
-                response = "**Prévisions M+1:**\n" + "\n".join([f"- {r['Code_MP']}: {r['Prév_M+1']:,.0f} kg" for _, r in df_result.nlargest(5, 'Prév_M+1').iterrows()])
-
-        elif "risque" in prompt_lower or "rupture" in prompt_lower:
-            df_risk = df_result[df_result['Risque_%'] > 0].sort_values('Risque_%', ascending=False)
-            if len(df_risk) > 0:
-                response = f"⚠️ **{len(df_risk)} MPs avec risque de rupture:**\n\n"
-                for _, row in df_risk.head(5).iterrows():
-                    date_str = row['Date_Rupture_Prévue'].strftime('%d/%m/%Y') if pd.notna(row['Date_Rupture_Prévue']) else 'N/A'
-                    response += f"- **{row['Code_MP']}**: Risque {row['Risque_%']:.0f}% | Rupture prévue {date_str}\n"
-            else:
-                response = "✅ Aucun risque de rupture détecté par l'IA!"
-
-        else:
-            response = f"**Questions dispo:**\n- 'Plan commande?' - Calendrier commandes optimales\n- 'Prévision MP_PP?' - Conso 3 chhour\n- 'Risque rupture?' - MPs en danger\n- 'ABC?' - Classification Pareto\n\n**MPs:** {', '.join(df_result['Code_MP'].tolist())}"
-
-        with st.chat_message("assistant"):
-            st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+                    response += f"**{row['Date_C
