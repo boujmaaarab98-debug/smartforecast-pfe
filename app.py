@@ -79,7 +79,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
     date_actuelle = datetime.now().date()
     date_12_mois = date_actuelle - relativedelta(months=12)
 
-    # 🔥 Initialiser session_state
     if 'dates_detection' not in st.session_state:
         st.session_state.dates_detection = {}
 
@@ -175,7 +174,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
         point_commande = conso_moy_j * lead_time
 
-        # 🔥 DATE FIXE
         date_cmd_optimale = None
         qte_suggeree_ia = 0
         statut_ia = "✅ Sécurisé"
@@ -285,7 +283,6 @@ if param is None:
 st.sidebar.header("⚙️ Configuration")
 st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
 
-# 🔥 BOUTON MS7 KOLCHI
 if st.sidebar.button("🗑️ Msa7 Dates Détection", type="secondary", use_container_width=True):
     if 'dates_detection' in st.session_state:
         st.session_state.dates_detection = {}
@@ -298,7 +295,6 @@ if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-# Afficher dates sauvegardées
 if 'dates_detection' in st.session_state and len(st.session_state.dates_detection) > 0:
     st.sidebar.divider()
     st.sidebar.caption("📍 Dates Détection Actives:")
@@ -486,7 +482,6 @@ with tab4:
             fig2 = px.pie(df_fourni_score, values='Valeur_Risque', names='Fournisseur', title="Valeur à Risque")
             st.plotly_chart(fig2, use_container_width=True)
 
-    # 🔥 JDID: GRAPHIQUE VALEUR COMMANDES PAR FOURNISSEUR
     st.divider()
     st.subheader("💰 Valeur Commandes à Passer par Fournisseur")
 
@@ -649,8 +644,4 @@ with tab6:
         response = ""
 
         if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
-            if len(df_cmd) > 0:
-                response = f"📅 **Plan Commande IA - {len(df_cmd)} MPs:**\n\n"
-                for _, row in df_cmd.head(10).iterrows():
-                    response += f"**{row['Date_C
+            df
