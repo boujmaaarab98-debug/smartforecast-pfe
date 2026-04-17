@@ -572,7 +572,7 @@ with tab5:
         fig_stock.add_trace(go.Bar(
             x=['Stock Actuel', 'Après Commande'],
             y=[mp_data_sim['Stock'], nouveau_stock],
-            marker_color=['#FF6B', '#4ECDC4'],
+            marker_color=['#FF6B6B', '#4ECDC4'],
             text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
             textposition='auto',
         ))
@@ -581,7 +581,7 @@ with tab5:
 
     with col_g2:
         color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B' if nouveau_ecart < 0 else '#4ECDC4'
+        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
         fig_ecart = go.Figure()
         fig_ecart.add_trace(go.Bar(
             x=['Écart Actuel', 'Après Commande'],
@@ -643,9 +643,4 @@ with tab6:
         response = ""
 
         if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
-            if len(df_cmd) > 0:
-                response = f"📅 **Plan Commande IA - {len(df_cmd)} MPs:**\n\n"
-                for _, row in df_cmd.head(10).iterrows():
-                    date_str = row['Date_Cmd_Optimale'].strftime('%d/%m')
-                    response += f"**{date_str}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg chez {row['Fournisseur']} ({row['Statut_IA']})\n
+            df_cmd = df_result[df_result['Date_Cmd_Optimale
