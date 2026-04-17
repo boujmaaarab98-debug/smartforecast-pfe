@@ -643,4 +643,4 @@ with tab6:
         response = ""
 
         if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd
+            df_cmd = df_result[df_result['Date_Cmd_Optimale'].
