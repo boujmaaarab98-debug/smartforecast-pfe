@@ -572,7 +572,7 @@ with tab5:
         fig_stock.add_trace(go.Bar(
             x=['Stock Actuel', 'Après Commande'],
             y=[mp_data_sim['Stock'], nouveau_stock],
-            marker_color=['#FF6B6B', '#4ECDC4'],
+            marker_color=['#FF6B', '#4ECDC4'],
             text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
             textposition='auto',
         ))
@@ -643,4 +643,6 @@ with tab6:
         response = ""
 
         if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].
+            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
+            if len(df_cmd) > 0:
+                response = f"📅 **Plan Commande IA - {
