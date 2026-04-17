@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 # CONFIG
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-st.set_page_config(page_title="MRP Pro Dashboard V4.4", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="MRP Pro Dashboard V4.6", layout="wide", page_icon="🤖")
 
 # ========================================
 # FONCTIONS UTILITAIRES
@@ -76,9 +76,12 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
     resultats = []
     forecasts_dict = {}
 
-    # 🔥 ROLLING 12 MOIS: Akhd ghir akhr 12 chehar mn lyoma
     date_actuelle = datetime.now().date()
     date_12_mois = date_actuelle - relativedelta(months=12)
+
+    # 🔥 Initialiser session_state
+    if 'dates_detection' not in st.session_state:
+        st.session_state.dates_detection = {}
 
     for _, mp_row in param.iterrows():
         code = mp_row[col_mp_param]
@@ -90,9 +93,11 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         cout_commande = mp_row.get('cout_commande', 500)
         taux_stockage = mp_row.get('taux_stockage', 0.2)
 
-        # 🔥 ROLLING: Ghir akhr 12 chehar
-        hist = conso[(conso[col_mp_conso] == code) & (conso['date'].dt.date >= date_12_mois)].copy()
-        hist = hist.dropna(subset=['date', col_qte_conso])
+        hist_total = conso[conso[col_mp_conso] == code].copy()
+        hist_total = hist_total.dropna(subset=['date', col_qte_conso])
+
+        hist_12m = hist_total[hist_total['date'].dt.date >= date_12_mois].copy()
+        hist = hist_12m if len(hist_12m) >= 10 else hist_total
 
         conso_prevue_30j = 0
         conso_moy_j = 0
@@ -104,33 +109,35 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         prevision_m2 = 0
         prevision_m3 = 0
 
-        if len(hist) >= 10:
+        if len(hist) >= 3:
             df_prophet = hist.groupby('date')[col_qte_conso].sum().reset_index()
             df_prophet.columns = ['ds', 'y']
             df_prophet = df_prophet.dropna()
 
-            if len(df_prophet) >= 10:
+            if len(df_prophet) >= 3:
                 try:
-                    m = Prophet(yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=False)
+                    m = Prophet(yearly_seasonality=len(df_prophet)>60, weekly_seasonality=True, daily_seasonality=False)
                     m.fit(df_prophet)
                     future = m.make_future_dataframe(periods=90)
                     forecast = m.predict(future)
                     fc_future = forecast[forecast['ds'].dt.date > date_actuelle].copy()
-                    if len(fc_future) >= 90:
-                        prevision_m1 = fc_future.head(30)['yhat'].sum()
-                        prevision_m2 = fc_future.iloc[30:60]['yhat'].sum()
-                        prevision_m3 = fc_future.iloc[60:90]['yhat'].sum()
+
+                    if len(fc_future) >= 30:
+                        prevision_m1 = max(0, fc_future.head(30)['yhat'].sum())
+                        prevision_m2 = max(0, fc_future.iloc[30:60]['yhat'].sum()) if len(fc_future) >= 60 else 0
+                        prevision_m3 = max(0, fc_future.iloc[60:90]['yhat'].sum()) if len(fc_future) >= 90 else 0
                         conso_prevue_30j = prevision_m1
                     else:
-                        conso_prevue_30j = fc_future['yhat'].sum()
+                        conso_prevue_30j = max(0, fc_future['yhat'].sum())
+                        prevision_m1 = conso_prevue_30j
+                        prevision_m2 = conso_prevue_30j
+                        prevision_m3 = conso_prevue_30j
 
-                    conso_prevue_30j = max(0, conso_prevue_30j)
                     conso_moy_j = df_prophet['y'].mean()
                     demande_annuelle = conso_moy_j * 365
                     forecasts_dict[code] = forecast
                     has_forecast = True
 
-                    # 🔥 IA: Date Rupture
                     if stock_secu <= 0:
                         date_rupture = date_actuelle
                         risque_pct = 100
@@ -153,6 +160,9 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
                     prevision_m3 = conso_prevue_30j
                     demande_annuelle = conso_moy_j * 365
 
+        if conso_moy_j == 0:
+            conso_moy_j = 0.1
+
         besoin_mrp = mrp[mrp[col_mp_mrp] == code][col_qte_mrp].sum()
         besoin_mrp = 0 if pd.isna(besoin_mrp) else besoin_mrp
 
@@ -165,30 +175,37 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
         point_commande = conso_moy_j * lead_time
 
-        # 🔥 FIX: Statut IA - Ila Écart négatif DIMA Urgent
+        # 🔥 DATE FIXE
         date_cmd_optimale = None
         qte_suggeree_ia = 0
         statut_ia = "✅ Sécurisé"
 
         if ecart < 0:
-            risque_pct = 100
-            date_rupture = date_actuelle
-            date_cmd_optimale = date_actuelle
+            if code not in st.session_state.dates_detection:
+                st.session_state.dates_detection[code] = date_actuelle
+
+            date_detection = st.session_state.dates_detection[code]
+            date_cmd_optimale = date_detection
             qte_suggeree_ia = max(abs(ecart), eoq, moq)
             statut_ia = "🔴 Urgent"
-        elif date_rupture:
-            date_cmd_optimale = date_rupture - timedelta(days=lead_time)
-            jours_avant_cmd = (date_cmd_optimale - date_actuelle).days
-            qte_suggeree_ia = max(eoq, moq)
+            risque_pct = 100
+            date_rupture = date_detection
+        else:
+            if code in st.session_state.dates_detection:
+                del st.session_state.dates_detection[code]
 
-            if jours_avant_cmd <= 0:
-                statut_ia = "🔴 Urgent"
-            elif jours_avant_cmd <= 7:
-                statut_ia = "🟠 À Planifier"
-            else:
-                statut_ia = "🟡 Surveiller"
+            if date_rupture:
+                date_cmd_optimale = date_rupture - timedelta(days=lead_time)
+                jours_avant_cmd = (date_cmd_optimale - date_actuelle).days
+                qte_suggeree_ia = max(eoq, moq)
 
-        # Statut Normal
+                if jours_avant_cmd <= 0:
+                    statut_ia = "🔴 Urgent"
+                elif jours_avant_cmd <= 7:
+                    statut_ia = "🟠 À Planifier"
+                else:
+                    statut_ia = "🟡 Surveiller"
+
         if len(hist) == 0:
             statut = "⚪ PAS DE DONNÉES"
             action = "Vérifier historique conso"
@@ -254,19 +271,39 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🤖 MRP Pro Dashboard V4.4 - Rolling Forecast")
-st.caption("Rolling 12 Mois + Prévision Mensuelle Auto + Plan Appro IA")
+st.title("🤖 MRP Pro Dashboard V4.6 - Date Fixe")
+st.caption("Rolling 12 Mois + Date Détection Fixe + Prévision Mensuelle")
 
 param, conso, mrp, fournis = charger_donnees_google()
 
 if param is None:
     st.stop()
 
+# ========================================
+# SIDEBAR
+# ========================================
 st.sidebar.header("⚙️ Configuration")
 st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
-if st.sidebar.button("🔄 Actualiser Données"):
+
+# 🔥 BOUTON MS7 KOLCHI
+if st.sidebar.button("🗑️ Msa7 Dates Détection", type="secondary", use_container_width=True):
+    if 'dates_detection' in st.session_state:
+        st.session_state.dates_detection = {}
+        st.sidebar.success("✅ Dates tms7o! Refresh...")
+        st.rerun()
+    else:
+        st.sidebar.info("Ma kayn walo")
+
+if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
+
+# Afficher dates sauvegardées
+if 'dates_detection' in st.session_state and len(st.session_state.dates_detection) > 0:
+    st.sidebar.divider()
+    st.sidebar.caption("📍 Dates Détection Actives:")
+    for mp, date in st.session_state.dates_detection.items():
+        st.sidebar.write(f"**{mp}**: {date.strftime('%d/%m/%Y')}")
 
 df_result, forecasts, df_fournis_all = analyser_mrp_appro(param, conso, mrp, fournis)
 
@@ -316,8 +353,8 @@ with tab1:
     st.download_button("📥 Télécharger CSV", csv, f"MRP_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
 
 with tab2:
-    st.subheader("🤖 Plan d'Approvisionnement IA - Zéro Rupture")
-    st.caption("L'IA kat 7sseb lik automatiquement mn Prophet + Rolling 12 mois")
+    st.subheader("🤖 Plan d'Approvisionnement IA - Date Fixe")
+    st.caption("Date 'Commander Avant' kat b9a tabta mn nhar detectina l'rupture")
 
     df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy()
     df_ia = df_ia.sort_values('Date_Cmd_Optimale')
@@ -350,7 +387,6 @@ with tab2:
             }
         )
 
-        # Timeline
         st.subheader("📅 Timeline Commandes - 90 prochains jours")
         df_timeline = df_ia[df_ia['Date_Cmd_Optimale'] <= datetime.now().date() + timedelta(days=90)].copy()
 
@@ -383,7 +419,7 @@ with tab2:
 
 with tab3:
     st.subheader("📅 Prévisions Mensuelles - Rolling 12 Mois")
-    st.caption("Kola chehar kay t'actualisa wa7do. Kay akhd akhr 12 chehar w y forecast 3 chhour l9ddam.")
+    st.caption("Basé 3la akhr 12 chehar. Kay t'actualisa wa7do kola chehar.")
 
     df_prev = df_result[['Code_MP', 'Désignation', 'Prév_M+1', 'Prév_M+2', 'Prév_M+3', 'Conso_Moy_J']].copy()
 
@@ -457,8 +493,8 @@ with tab5:
     st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
     col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v5")
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v5")
+    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v6")
+    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v6")
 
     mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0]
     nouveau_stock = mp_data_sim['Stock'] + qte_sim
@@ -569,7 +605,6 @@ with tab6:
         elif "risque" in prompt_lower or "rupture" in prompt_lower:
             df_risk = df_result[df_result['Risque_%'] > 0].sort_values('Risque_%', ascending=False)
             if len(df_risk) > 0:
-                # 🔥 FIX: F-string mzian
                 response = f"⚠️ **{len(df_risk)} MPs avec risque de rupture:**\n\n"
                 for _, row in df_risk.head(5).iterrows():
                     date_str = row['Date_Rupture_Prévue'].strftime('%d/%m/%Y') if pd.notna(row['Date_Rupture_Prévue']) else 'N/A'
