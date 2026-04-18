@@ -560,6 +560,11 @@ with tab5:
         ))
         fig_stock.update_layout(title="📦 Stock (kg)", yaxis_title="Kg", showlegend=False, height=300)
         st.plotly_chart(fig_stock, use_container_width=True)
+            # Fix NaN values li kay t9ll9 Plotly
+    if pd.isna(mp_data_sim['Écart']): mp_data_sim['Écart'] = 0
+    if pd.isna(nouveau_ecart): nouveau_ecart = 0
+    if pd.isna(mp_data_sim['Stock']): mp_data_sim['Stock'] = 0
+    if pd.isna(mp_data_sim['Couverture_J']): mp_data_sim['Couverture_J'] = 0
 
     with col_g2:
         color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
@@ -576,36 +581,20 @@ with tab5:
         fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
         st.plotly_chart(fig_ecart, use_container_width=True)
 
-    with col_g3:
-        color_couv_avant = '#FF6B6B' if mp_data_sim['Couverture_J'] < 7 else '#FFA500' if mp_data_sim['Couverture_J'] < 14 else '#4ECDC4'
-        color_couv_apres = '#FF6B6B' if nouvelle_couv < 7 else '#FFA500' if nouvelle_couv < 14 else '#4ECDC4'
-        fig_couv = go.Figure()
-        fig_couv.add_trace(go.Bar(
-            x=['Couv. Actuelle', 'Après Commande'],
-            y=[mp_data_sim['Couverture_J'], nouvelle_couv],
-            marker_color=[color_couv_avant, color_couv_apres],
-            text=[f"{mp_data_sim['Couverture_J']:.0f}j", f"{nouvelle_couv:.0f}j"],
+       with col_g2:
+        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
+        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
+        fig_ecart = go.Figure()
+        fig_ecart.add_trace(go.Bar(
+            x=['Écart Actuel', 'Après Commande'],
+            y=[mp_data_sim['Écart'], nouveau_ecart],
+            marker_color=[color_avant, color_apres],
+            text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"],
             textposition='auto',
         ))
-        fig_couv.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Critique")
-        fig_couv.add_hline(y=14, line_dash="dash", line_color="orange", annotation_text="Tension")
-        fig_couv.update_layout(title="📅 Couverture (jours)", yaxis_title="Jours", showlegend=False, height=300)
-        st.plotly_chart(fig_couv, use_container_width=True)
-
-    st.divider()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"+{qte_sim:,.0f}")
-    col2.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg", f"{nouveau_ecart - mp_data_sim['Écart']:,.0f}")
-    col3.metric("Nouvelle Couverture", f"{nouvelle_couv:.0f} jours", f"{nouvelle_couv - mp_data_sim['Couverture_J']:.0f}")
-    col4.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
-
-    if nouveau_ecart >= 0:
-        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**! Couverture {nouvelle_couv:.0f} jours. Plus de risque! 🎉")
-    elif nouveau_ecart >= -mp_data_sim['EOQ']:
-        st.warning(f"🟠 **VERDICT: TENSION** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
-    else:
-        st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda!")
-
+        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
+        fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
+        st.plotly_chart(fig_ecart, use_container_width=True)
 with tab6:
     st.subheader("💬 Chat IA Pro")
 
