@@ -595,67 +595,83 @@ with tab5:
         fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
         fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
         st.plotly_chart(fig_ecart, use_container_width=True)
-with tab6:
-    st.subheader("💬 Chat IA Pro")
+with tab5:
+    st.subheader("🎯 Simulateur What-If - VERSION VISUELLE")
+    st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    col1, col2, col3 = st.columns(3)
+    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v7")
+    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v7")
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0].copy()
 
-    if prompt := st.chat_input("Ex: 'Plan commande?' 'Prévision MP_PP?' 'Risque rupture?'"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # Fix NaN bach Plotly ma yt9ll9ch
+    for col in ['Stock', 'Écart', 'Couverture_J', 'Conso_Moy_J']:
+        if pd.isna(mp_data_sim[col]):
+            mp_data_sim[col] = 0
 
-        p = prompt.lower()
-        r = ""
+    nouveau_stock = mp_data_sim['Stock'] + qte_sim
+    nouveau_ecart = nouveau_stock - (mp_data_sim['Besoin_MRP'] + mp_data_sim['Conso_30j'])
+    nouvelle_couv = nouveau_stock / mp_data_sim['Conso_Moy_J'] if mp_data_sim['Conso_Moy_J'] > 0 else 999
 
-        if "plan" in p or "commande" in p:
-            df_c = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
-            if len(df_c) > 0:
-                r = f"📅 **Plan Commande IA - {len(df_c)} MPs:**\n\n"
-                for _, row in df_c.head(10).iterrows():
-                    d = row['Date_Cmd_Optimale'].strftime('%d/%m')
-                    r += f"**{d}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg chez {row['Fournisseur']} ({row['Statut_IA']})\n"
-                r += f"\n💰 **Total:** {(df_c['Qté_Suggérée_IA'] * df_c['Cout_Unit']).sum():,.0f} MAD"
-            else:
-                r = "✅ **Kolchi sécurisé!** Ma kayn 7ta commande à planifier."
+    st.divider()
+    st.subheader(f"📊 Impact Visuel - {mp_sim}")
 
-        elif "prévision" in p or "prevision" in p or "prev" in p:
-            r = "📊 **Prévisions 3 Mois Prochains:**\n\n"
-            for _, row in df_result.iterrows():
-                r += f"**{row['Code_MP']}**: {row['Prév_M+1']:,.0f} / {row['Prév_M+2']:,.0f} / {row['Prév_M+3']:,.0f} kg\n"
+    col_g1, col_g2, col_g3 = st.columns(3)
 
-        elif "risque" in p or "rupture" in p:
-            crit = df_result[df_result['Risque_%'] > 50]
-            if len(crit) > 0:
-                r = f"⚠️ **{len(crit)} MPs f Risque Élevé:**\n\n"
-                for _, row in crit.iterrows():
-                    r += f"**{row['Code_MP']}**: {row['Risque_%']:.0f}% risque - {row['Action']}\n"
-            else:
-                r = "✅ **Ma kayn 7ta risque critique!** Kolchi mzyan."
+    with col_g1:
+        fig_stock = go.Figure()
+        fig_stock.add_trace(go.Bar(
+            x=['Stock Actuel', 'Après Commande'],
+            y=[mp_data_sim['Stock'], nouveau_stock],
+            marker_color=['#FF6B6B', '#4ECDC4'],
+            text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
+            textposition='auto',
+        ))
+        fig_stock.update_layout(title="📦 Stock (kg)", yaxis_title="Kg", showlegend=False, height=300)
+        st.plotly_chart(fig_stock, use_container_width=True)
 
-        elif "abc" in p or "classe" in p:
-            ca = df_result[df_result['Classe'] == 'A']
-            r = f"💎 **Classe A - {len(ca)} MPs critiques:**\n\n"
-            for _, row in ca.iterrows():
-                r += f"**{row['Code_MP']}**: {row['Valeur_Risque']:,.0f} MAD à risque - {row['Statut']}\n"
+    with col_g2:
+        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
+        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
+        fig_ecart = go.Figure()
+        fig_ecart.add_trace(go.Bar(
+            x=['Écart Actuel', 'Après Commande'],
+            y=[mp_data_sim['Écart'], nouveau_ecart],
+            marker_color=[color_avant, color_apres],
+            text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"],
+            textposition='auto',
+        ))
+        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
+        fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
+        st.plotly_chart(fig_ecart, use_container_width=True)
 
-        elif "fournisseur" in p:
-            df_f = df_result[df_result['Fournisseur'] != 'N/A'].groupby('Fournisseur')['Valeur_Risque'].sum().sort_values(ascending=False)
-            r = "🏭 **Valeur à Risque par Fournisseur:**\n\n"
-            for f, v in df_f.items():
-                if v > 0:
-                    r += f"**{f}**: {v:,.0f} MAD\n"
-            if df_f.sum() == 0:
-                r = "✅ **Ma kayn 7ta risque chez fournisseurs!**"
+    with col_g3:
+        color_couv_avant = '#FF6B6B' if mp_data_sim['Couverture_J'] < 7 else '#FFA500' if mp_data_sim['Couverture_J'] < 14 else '#4ECDC4'
+        color_couv_apres = '#FF6B6B' if nouvelle_couv < 7 else '#FFA500' if nouvelle_couv < 14 else '#4ECDC4'
+        fig_couv = go.Figure()
+        fig_couv.add_trace(go.Bar(
+            x=['Couv. Actuelle', 'Après Commande'],
+            y=[mp_data_sim['Couverture_J'], nouvelle_couv],
+            marker_color=[color_couv_avant, color_couv_apres],
+            text=[f"{mp_data_sim['Couverture_J']:.0f}j", f"{nouvelle_couv:.0f}j"],
+            textposition='auto',
+        ))
+        fig_couv.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Critique")
+        fig_couv.add_hline(y=14, line_dash="dash", line_color="orange", annotation_text="Tension")
+        fig_couv.update_layout(title="📅 Couverture (jours)", yaxis_title="Jours", showlegend=False, height=300)
+        st.plotly_chart(fig_couv, use_container_width=True)
 
-        else:
-            r = "🤖 **Ana hna!** Swwlni 3la:\n- `plan commande` - Chnou n commandi\n- `prévision` - Ch7al ghadi nconsommi\n- `risque` - Chkoun f khatar\n- `classe A` - MPs critiques\n- `fournisseur` - Analyse fournisseurs"
+    st.divider()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"+{qte_sim:,.0f}")
+    col2.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg", f"{nouveau_ecart - mp_data_sim['Écart']:,.0f}")
+    col3.metric("Nouvelle Couverture", f"{nouvelle_couv:.0f} jours", f"{nouvelle_couv - mp_data_sim['Couverture_J']:.0f}")
+    col4.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
 
-        st.session_state.messages.append({"role": "assistant", "content": r})
-        with st.chat_message("assistant"):
-            st.markdown(r)
+    if nouveau_ecart >= 0:
+        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**! Couverture {nouvelle_couv:.0f} jours. Plus de risque! 🎉")
+    elif nouveau_ecart >= -mp_data_sim['EOQ']:
+        st.warning(f"🟠 **VERDICT: TENSION** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+    else:
+        st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
