@@ -5,11 +5,12 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
 from io import BytesIO
+import zipfile
 
-st.set_page_config(page_title="MRP Pro V4.13.1 - Full KPIs", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.13.2 - Fix Excel", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.13.1 - KPIs Professionnels Complets")
-st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Saisonnalité + Forecast + Export")
+st.title("🚀 MRP Pro Dashboard V4.13.2 - KPIs Professionnels Complets")
+st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Export CSV")
 
 # ==================== 1. SEUILS PROFESSIONNELS ====================
 SEUIL_ROUGE = 4
@@ -34,29 +35,29 @@ URL_MRP = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAm
 def clean_numeric(series):
     return pd.to_numeric(
         series.astype(str)
-      .str.replace(' ', '')
-      .str.replace(',', '.')
-      .str.replace('€', '')
-      .str.replace('KG', '')
-      .str.replace('kg', '')
-      .str.strip(),
+    .str.replace(' ', '')
+    .str.replace(',', '.')
+    .str.replace('€', '')
+    .str.replace('KG', '')
+    .str.replace('kg', '')
+    .str.strip(),
         errors='coerce'
     )
 
-def to_excel(df_dict):
-    """Export multiple dataframes l Excel"""
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+def to_zip_csv(df_dict):
+    """Export multiple dataframes l ZIP dyal CSV - Ma kay7tajch openpyxl"""
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for sheet_name, df in df_dict.items():
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-    output.seek(0)
-    return output
+            csv_bytes = df.to_csv(index=False).encode('utf-8')
+            zip_file.writestr(f"{sheet_name}.csv", csv_bytes)
+    zip_buffer.seek(0)
+    return zip_buffer
 
 # ==================== 4. FONCTION DE CHARGEMENT ====================
 @st.cache_data(ttl=600)
 def load_full_data():
     try:
-        # --- Param ---
         df_param = pd.read_csv(URL_PARAM)
         df_param = df_param.rename(columns={
             'code_mp': 'Code_MP',
@@ -69,7 +70,6 @@ def load_full_data():
             if col in df_param.columns:
                 df_param[col] = clean_numeric(df_param[col])
 
-        # --- Conso ---
         df_conso = pd.read_csv(URL_CONSO)
         df_conso = df_conso.rename(columns={
             'Ref produit finis': 'Ref_PF',
@@ -83,7 +83,6 @@ def load_full_data():
         df_conso['Stock_Actuel_MP'] = df_conso['Couverture_Octab'] * df_conso['Conso_U_Unitaire']
         df_conso = df_conso.dropna(subset=['Code_MP', 'Ref_PF'])
 
-        # --- Fournisseurs ---
         df_fournis = pd.read_csv(URL_FOURNIS)
         df_fournis = df_fournis.rename(columns={
             'code_mp': 'Code_MP',
@@ -96,11 +95,9 @@ def load_full_data():
             if col in df_fournis.columns:
                 df_fournis[col] = clean_numeric(df_fournis[col])
 
-        # --- MRP Prévisionnel ---
         df_prev_pf = pd.read_csv(URL_MRP)
         df_prev_pf = df_prev_pf.rename(columns={'Ref produit finis': 'Ref_PF'})
 
-        # Explosion Prévisionnel
         df_prev_melt = df_prev_pf.melt(id_vars=['Ref_PF'], var_name='Date', value_name='Qte_PF_Prévue')
         df_prev_melt['Qte_PF_Prévue'] = clean_numeric(df_prev_melt['Qte_PF_Prévue'])
         df_prev_melt = df_prev_melt.dropna(subset=['Qte_PF_Prévue'])
@@ -111,7 +108,6 @@ def load_full_data():
         df_besoin_mp['Besoin_MP_KG'] = df_besoin_mp['Qte_PF_Prévue'] * df_besoin_mp['Conso_U_Unitaire']
         df_besoin_jour = df_besoin_mp.groupby(['Code_MP', 'Date'])['Besoin_MP_KG'].sum().reset_index()
 
-        # --- Construction DF_MRP Final ---
         df_mrp = df_param.copy()
         stock_actuel = df_conso.groupby('Code_MP')['Stock_Actuel_MP'].sum().reset_index().rename(columns={'Stock_Actuel_MP': 'Stock'})
         df_mrp = pd.merge(df_mrp, stock_actuel, on='Code_MP', how='left')
@@ -155,7 +151,7 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 6. INTERFACE V4.13.1 ====================
+# ==================== 6. INTERFACE V4.13.2 ====================
 tab1, tab2, tab3, tab4 = st.tabs(["📊 MRP Complet", "📈 KPIs Conso & Prévision PRO", "⚠️ Alertes", "🏢 Fournisseurs"])
 
 with tab1:
@@ -184,8 +180,6 @@ with tab1:
 with tab2:
     st.header("📈 KPIs Consommation & Prévision - Niveau Professionnel")
 
-    # ===== KPI 1: Consommation Moyenne =====
-    st.subheader("1️⃣ Consommation Moyenne + Volatilité")
     conso_moy = df_conso.groupby('Code_MP')['Conso_U_Unitaire'].agg(['mean', 'std', 'count']).reset_index()
     conso_moy.columns = ['Code_MP', 'Conso_Moy_KG', 'Volatilité_StdDev', 'Nb_PF_Utilisateurs']
     conso_moy['CV_%'] = (conso_moy['Volatilité_StdDev'] / conso_moy['Conso_Moy_KG'] * 100).round(1)
@@ -201,7 +195,6 @@ with tab2:
     col3.metric("CV% Moyen", f"{conso_moy['CV_%'].mean():.1f}%")
     st.dataframe(conso_moy.sort_values('Conso_Moy_KG', ascending=False), use_container_width=True, height=250)
 
-    # ===== KPI 2: Top 10 + Pareto 80/20 =====
     st.subheader("2️⃣ Top 10 MP Consommés + Pareto 80/20")
     top10 = conso_moy.sort_values('Conso_Moy_KG', ascending=False).head(10)
     top10['Cumul_%'] = (top10['Conso_Moy_KG'].cumsum() / conso_moy['Conso_Moy_KG'].sum() * 100).round(1)
@@ -212,7 +205,6 @@ with tab2:
     fig_pareto.update_layout(yaxis2=dict(overlaying='y', side='right', title='Cumul %'), title="Pareto: 80% dyal consommation jaya mn ache mn MP")
     st.plotly_chart(fig_pareto, use_container_width=True)
 
-    # ===== KPI 3: Saisonnalité Heatmap =====
     st.subheader("3️⃣ Saisonnalité Consommation - Heatmap")
     df_besoin_jour['Mois'] = df_besoin_jour['Date'].dt.month_name()
     saison = df_besoin_jour.groupby(['Code_MP', 'Mois'])['Besoin_MP_KG'].sum().reset_index()
@@ -222,13 +214,11 @@ with tab2:
         fig_heat = px.imshow(saison_pivot, aspect='auto', title="Saisonnalité: Ch7al katstahlk f kol chhr", color_continuous_scale='YlOrRd')
         st.plotly_chart(fig_heat, use_container_width=True)
 
-    # ===== KPI 4: Corrélation PF-MP =====
     st.subheader("4️⃣ Corrélation PF → MP")
     correl = df_conso.groupby(['Ref_PF', 'Code_MP', 'Projet'])['Conso_U_Unitaire'].sum().reset_index()
     correl = correl.sort_values('Conso_U_Unitaire', ascending=False)
     st.dataframe(correl.head(20), use_container_width=True, height=250)
 
-    # ===== KPI 5: Forecast 6 Mois - FIX =====
     st.subheader("5️⃣ Forecast Consommation 6 Mois Jiyin")
     conso_mensuelle = df_besoin_jour.copy()
     conso_mensuelle['Mois'] = conso_mensuelle['Date'].dt.to_period('M')
@@ -254,7 +244,6 @@ with tab2:
     else:
         st.info("Ma kaynach data kafya bach ndir forecast. Khassk au moins 3 mois d'historique.")
 
-    # ===== KPI 6: Stockout Simulé =====
     st.subheader("6️⃣ Date Prévue dyal Rupture Stock")
     df_rupture = df_mrp[df_mrp['Consommation_J'] > 0].copy()
     df_rupture['Jours_Ba9i'] = (df_rupture['Stock'] / df_rupture['Consommation_J']).round(0)
@@ -262,7 +251,6 @@ with tab2:
     df_rupture = df_rupture[df_rupture['Jours_Ba9i'] < 60].sort_values('Jours_Ba9i')
     st.dataframe(df_rupture[['Code_MP', 'Désignation', 'Stock', 'Consommation_J', 'Jours_Ba9i', 'Date_Rupture_Prévue', 'Statut']], use_container_width=True, height=250)
 
-    # ===== KPI 7: MOQ Optimal =====
     st.subheader("7️⃣ Suggestion MOQ Optimal")
     besoin_30j = df_besoin_jour[df_besoin_jour['Date'] <= datetime.now() + timedelta(days=30)].groupby('Code_MP')['Besoin_MP_KG'].sum().reset_index()
     besoin_30j.columns = ['Code_MP', 'Besoin_30j_KG']
@@ -272,9 +260,9 @@ with tab2:
     df_moq_opt = df_moq_opt[df_moq_opt['Économie'] > 0].sort_values('Économie', ascending=False)
     st.dataframe(df_moq_opt[['Code_MP', 'MOQ_Param', 'MOQ_Suggéré', 'Économie']], use_container_width=True, height=250)
 
-    # ===== EXPORT EXCEL =====
-    st.subheader("📥 Export Excel Professionnel")
-    excel_data = to_excel({
+    # ===== EXPORT ZIP CSV - FIX =====
+    st.subheader("📥 Export ZIP - Kolchi KPIs f CSV")
+    zip_data = to_zip_csv({
         'KPIs_Conso': conso_moy,
         'Pareto_Top10': top10,
         'Saisonnalité': saison,
@@ -284,10 +272,10 @@ with tab2:
         'MOQ_Optimal': df_moq_opt
     })
     st.download_button(
-        label="⬇️ Télécharger Rapport KPIs Excel",
-        data=excel_data,
-        file_name=f"KPIs_Conso_Prevision_{datetime.now().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        label="⬇️ Télécharger Rapport KPIs ZIP",
+        data=zip_data,
+        file_name=f"KPIs_Conso_Prevision_{datetime.now().strftime('%Y%m%d')}.zip",
+        mime="application/zip"
     )
 
 with tab3:
