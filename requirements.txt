@@ -3,6 +3,5 @@ pandas
 numpy
 prophet
 plotly
-openpyxl
-duckduckgo-search==6.1.5
-requests
+reportlab
+python-dateutil
