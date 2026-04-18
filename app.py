@@ -536,70 +536,6 @@ with tab5:
     st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
     col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v6")
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v6")
-
-    mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0]
-    nouveau_stock = mp_data_sim['Stock'] + qte_sim
-    nouveau_ecart = nouveau_stock - (mp_data_sim['Besoin_MRP'] + mp_data_sim['Conso_30j'])
-    nouvelle_couv = nouveau_stock / mp_data_sim['Conso_Moy_J'] if mp_data_sim['Conso_Moy_J'] > 0 else 999
-
-    st.divider()
-    st.subheader(f"📊 Impact Visuel - {mp_sim}")
-
-    col_g1, col_g2, col_g3 = st.columns(3)
-
-    with col_g1:
-        fig_stock = go.Figure()
-        fig_stock.add_trace(go.Bar(
-            x=['Stock Actuel', 'Après Commande'],
-            y=[mp_data_sim['Stock'], nouveau_stock],
-            marker_color=['#FF6B6B', '#4ECDC4'],
-            text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"],
-            textposition='auto',
-        ))
-        fig_stock.update_layout(title="📦 Stock (kg)", yaxis_title="Kg", showlegend=False, height=300)
-        st.plotly_chart(fig_stock, use_container_width=True)
-            # Fix NaN values li kay t9ll9 Plotly
-    if pd.isna(mp_data_sim['Écart']): mp_data_sim['Écart'] = 0
-    if pd.isna(nouveau_ecart): nouveau_ecart = 0
-    if pd.isna(mp_data_sim['Stock']): mp_data_sim['Stock'] = 0
-    if pd.isna(mp_data_sim['Couverture_J']): mp_data_sim['Couverture_J'] = 0
-
-    with col_g2:
-        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B' if nouveau_ecart < 0 else '#4ECDC4'
-        fig_ecart = go.Figure()
-        fig_ecart.add_trace(go.Bar(
-            x=['Écart Actuel', 'Après Commande'],
-            y=[mp_data_sim['Écart'], nouveau_ecart],
-            marker_color=[color_avant, color_apres],
-            text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"],
-            textposition='auto',
-        ))
-        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
-        fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
-        st.plotly_chart(fig_ecart, use_container_width=True)
-
-       with col_g2:
-        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
-        fig_ecart = go.Figure()
-        fig_ecart.add_trace(go.Bar(
-            x=['Écart Actuel', 'Après Commande'],
-            y=[mp_data_sim['Écart'], nouveau_ecart],
-            marker_color=[color_avant, color_apres],
-            text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"],
-            textposition='auto',
-        ))
-        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
-        fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
-        st.plotly_chart(fig_ecart, use_container_width=True)
-with tab5:
-    st.subheader("🎯 Simulateur What-If - VERSION VISUELLE")
-    st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
-
-    col1, col2, col3 = st.columns(3)
     mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v7")
     qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v7")
 
@@ -675,3 +611,29 @@ with tab5:
         st.warning(f"🟠 **VERDICT: TENSION** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
     else:
         st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+
+with tab6:
+    st.subheader("💬 Chat IA Pro")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ex: 'Plan commande?' 'Prévision MP_PP?' 'Risque rupture?'"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        p = prompt.lower()
+        r = ""
+
+        if "plan" in p or "commande" in p:
+            df_c = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
+            if len(df_c) > 0:
+                r = f"📅 **Plan Commande IA - {len(df_c)} MPs:**\n\n"
+                for _, row in df_c.head(10).iterrows():
+                    d = row['Date_Cmd_Optimale'].strftime('%d/%m')
+                    r += f"**{d}**: {
