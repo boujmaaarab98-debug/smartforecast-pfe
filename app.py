@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 # CONFIG
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-st.set_page_config(page_title="MRP Pro Dashboard V4.6", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="MRP Pro Dashboard V4.7", layout="wide", page_icon="🤖")
 
 # ========================================
 # FONCTIONS UTILITAIRES
@@ -78,9 +78,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
     date_actuelle = datetime.now().date()
     date_12_mois = date_actuelle - relativedelta(months=12)
-
-    if 'dates_detection' not in st.session_state:
-        st.session_state.dates_detection = {}
 
     for _, mp_row in param.iterrows():
         code = mp_row[col_mp_param]
@@ -174,24 +171,20 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
         point_commande = conso_moy_j * lead_time
 
+        # ============= V4.7 FIX: LOGIQUE JDIDA DYAL DATES =============
         date_cmd_optimale = None
         qte_suggeree_ia = 0
         statut_ia = "✅ Sécurisé"
 
         if ecart < 0:
-            if code not in st.session_state.dates_detection:
-                st.session_state.dates_detection[code] = date_actuelle
-
-            date_detection = st.session_state.dates_detection[code]
-            date_cmd_optimale = date_detection
+            # F RUPTURE = URGENT = COMMANDER AUJOURD'HUI
             qte_suggeree_ia = max(abs(ecart), eoq, moq)
             statut_ia = "🔴 Urgent"
             risque_pct = 100
-            date_rupture = date_detection
+            date_rupture = date_actuelle
+            date_cmd_optimale = date_actuelle # Fat l 7al, khas daba!
         else:
-            if code in st.session_state.dates_detection:
-                del st.session_state.dates_detection[code]
-
+            # MAZAL MA F RUPTURE
             if date_rupture:
                 date_cmd_optimale = date_rupture - timedelta(days=lead_time)
                 jours_avant_cmd = (date_cmd_optimale - date_actuelle).days
@@ -199,10 +192,12 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
                 if jours_avant_cmd <= 0:
                     statut_ia = "🔴 Urgent"
+                    date_cmd_optimale = date_actuelle # Fat l wa9t
                 elif jours_avant_cmd <= 7:
                     statut_ia = "🟠 À Planifier"
                 else:
                     statut_ia = "🟡 Surveiller"
+        # ============= FIN FIX =============
 
         if len(hist) == 0:
             statut = "⚪ PAS DE DONNÉES"
@@ -269,8 +264,8 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🤖 MRP Pro Dashboard V4.6 - Date Fixe")
-st.caption("Rolling 12 Mois + Date Détection Fixe + Prévision Mensuelle")
+st.title("🤖 MRP Pro Dashboard V4.7 - Logique Corrigée")
+st.caption("Rolling 12 Mois + Commander Avant = Aujourd'hui si Urgent")
 
 param, conso, mrp, fournis = charger_donnees_google()
 
@@ -283,23 +278,9 @@ if param is None:
 st.sidebar.header("⚙️ Configuration")
 st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
 
-if st.sidebar.button("🗑️ Msa7 Dates Détection", type="secondary", use_container_width=True):
-    if 'dates_detection' in st.session_state:
-        st.session_state.dates_detection = {}
-        st.sidebar.success("✅ Dates tms7o! Refresh...")
-        st.rerun()
-    else:
-        st.sidebar.info("Ma kayn walo")
-
 if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
-
-if 'dates_detection' in st.session_state and len(st.session_state.dates_detection) > 0:
-    st.sidebar.divider()
-    st.sidebar.caption("📍 Dates Détection Actives:")
-    for mp, date in st.session_state.dates_detection.items():
-        st.sidebar.write(f"**{mp}**: {date.strftime('%d/%m/%Y')}")
 
 df_result, forecasts, df_fournis_all = analyser_mrp_appro(param, conso, mrp, fournis)
 
@@ -349,8 +330,9 @@ with tab1:
     st.download_button("📥 Télécharger CSV", csv, f"MRP_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
 
 with tab2:
-    st.subheader("🤖 Plan d'Approvisionnement IA - Date Fixe")
-    st.caption("Date 'Commander Avant' kat b9a tabta mn nhar detectina l'rupture")
+    st.subheader("🤖 Plan d'Approvisionnement IA")
+    st.caption("Commander Avant = Aujourd'hui ila rak f rupture")
+    st.info("💡 **Logique V4.7:** Ila `Statut_IA = Urgent`, `Commander Avant = Aujourd'hui` 7it khas tcommandi daba!")
 
     df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy()
     df_ia = df_ia.sort_values('Date_Cmd_Optimale')
@@ -581,7 +563,7 @@ with tab5:
 
     with col_g2:
         color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
+        color_apres = '#FF6B' if nouveau_ecart < 0 else '#4ECDC4'
         fig_ecart = go.Figure()
         fig_ecart.add_trace(go.Bar(
             x=['Écart Actuel', 'Après Commande'],
@@ -625,8 +607,7 @@ with tab5:
         st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda!")
 
 with tab6:
-    st.subheader("💬 Chat IA Pro - Version Simplifiée")
-    st.caption("Version bla mochkil dyal syntax ✅")
+    st.subheader("💬 Chat IA Pro")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -635,14 +616,14 @@ with tab6:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Swwl 3la: plan commande, prévision, risque, classe A, fournisseur"):
+    if prompt := st.chat_input("Ex: 'Plan commande?' 'Prévision MP_PP?' 'Risque rupture?'"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         p = prompt.lower()
         r = ""
-        
+
         if "plan" in p or "commande" in p:
             df_c = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
             if len(df_c) > 0:
@@ -653,39 +634,5 @@ with tab6:
                 r += f"\n💰 **Total:** {(df_c['Qté_Suggérée_IA'] * df_c['Cout_Unit']).sum():,.0f} MAD"
             else:
                 r = "✅ **Kolchi sécurisé!** Ma kayn 7ta commande à planifier."
-        
-        elif "prévision" in p or "prevision" in p:
-            r = "📊 **Prévisions 3 Mois Prochains:**\n\n"
-            for _, row in df_result.iterrows():
-                r += f"**{row['Code_MP']}**: {row['Prév_M+1']:,.0f} / {row['Prév_M+2']:,.0f} / {row['Prév_M+3']:,.0f} kg\n"
-        
-        elif "risque" in p or "rupture" in p:
-            crit = df_result[df_result['Risque_%'] > 50]
-            if len(crit) > 0:
-                r = f"⚠️ **{len(crit)} MPs f Risque Élevé:**\n\n"
-                for _, row in crit.iterrows():
-                    r += f"**{row['Code_MP']}**: {row['Risque_%']:.0f}% risque - {row['Action']}\n"
-            else:
-                r = "✅ **Ma kayn 7ta risque critique!** Kolchi mzyan."
-        
-        elif "abc" in p or "classe" in p:
-            ca = df_result[df_result['Classe'] == 'A']
-            r = f"💎 **Classe A - {len(ca)} MPs critiques:**\n\n"
-            for _, row in ca.iterrows():
-                r += f"**{row['Code_MP']}**: {row['Valeur_Risque']:,.0f} MAD à risque - {row['Statut']}\n"
-        
-        elif "fournisseur" in p:
-            df_f = df_result[df_result['Fournisseur'] != 'N/A'].groupby('Fournisseur')['Valeur_Risque'].sum().sort_values(ascending=False)
-            r = "🏭 **Valeur à Risque par Fournisseur:**\n\n"
-            for f, v in df_f.items():
-                if v > 0:
-                    r += f"**{f}**: {v:,.0f} MAD\n"
-            if df_f.sum() == 0:
-                r = "✅ **Ma kayn 7ta risque chez fournisseurs!**"
-        
-        else:
-            r = "🤖 **Ana hna!** Swwlni 3la:\n- `plan commande` - Chnou n commandi\n- `prévision` - Ch7al ghadi nconsommi\n- `risque` - Chkoun f khatar\n- `classe A` - MPs critiques\n- `fournisseur` - Analyse fournisseurs"
 
-        st.session_state.messages.append({"role": "assistant", "content": r})
-        with st.chat_message("assistant"):
-            st.markdown(r)
+        elif "prévision" in p or "prev
