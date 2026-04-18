@@ -285,7 +285,7 @@ if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Dashboard", "🤖 Plan Appro IA", "📅 Prévisions", "🏭 Fournisseurs", "🎯 Simulateur", "💬 Chat IA"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 Dashboard", "🤖 Plan Appro IA", "📅 Prévisions", "🏭 Fournisseurs", "🎯 Simulateur", "💬 Chat IA", "🏆 Fourni 360"])
 
 with tab1:
     st.subheader("📊 KPIs Globaux - Version Pro")
@@ -503,3 +503,13 @@ with tab6:
         st.session_state.messages.append({"role": "assistant", "content": r})
         with st.chat_message("assistant"):
             st.markdown(r)
+
+with tab6:
+    st.subheader("💬 Chat IA Pro - Version Stable")
+    ... # code dyal tab6 kamlo
+    # akhr ster dyal tab6 hna
+
+# W HNA BDDA TAB7
+with tab7:
+    st.subheader("🏆 Fournisseur 360 - Dashboard Individuel")
+    ... # code dyal tab7 li 3titk
