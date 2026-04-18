@@ -514,7 +514,6 @@ with tab7:
     st.subheader("🏆 Fournisseur 360 - Dashboard Individuel")
     st.caption("Profil kamil dyal kola fournisseur b KPIs w historique")
 
-    # SELECTEUR FOURNISSEUR
     if df_fournis_all is None or len(df_fournis_all) == 0:
         st.warning("Ma kaynch données fournisseurs f sheet 'Fournisseurs'")
         st.stop()
@@ -528,11 +527,9 @@ with tab7:
     fourni_select = st.selectbox("🎯 Khtar Fournisseur", liste_fournis)
 
     if fourni_select:
-        # FILTRAGE DATA
         df_fourni_data = df_fournis_all[df_fournis_all['nom_fournisseur'] == fourni_select].copy()
         df_mps_fourni = df_result[df_result['Fournisseur'] == fourni_select].copy()
         
-        # ==================== KPIs HEADER ====================
         col1, col2, col3, col4, col5 = st.columns(5)
         
         nb_mps = len(df_mps_fourni)
@@ -544,7 +541,6 @@ with tab7:
         note_qualite = df_fourni_data['note_qualite_5'].mean() if len(df_fourni_data) > 0 else 0
         valeur_risque = df_mps_fourni['Valeur_Risque'].sum()
         
-        # Score Global
         score_global = (taux_service * 0.4 + fiabilite * 0.3 + note_qualite * 20 * 0.3)
         
         with col1:
@@ -563,7 +559,6 @@ with tab7:
         
         st.divider()
         
-        # ==================== GRAPHIQUES ====================
         col_g1, col_g2 = st.columns(2)
         
         with col_g1:
@@ -596,7 +591,6 @@ with tab7:
         
         st.divider()
         
-        # ==================== TABLEAU MPs ====================
         st.subheader(f"📦 MPs Fournis par {fourni_select} - {len(df_mps_fourni)} articles")
         
         if len(df_mps_fourni) > 0:
@@ -613,21 +607,18 @@ with tab7:
                 }
             )
             
-            # EXPORT EXCEL PAR FOURNISSEUR
-           # EXPORT CSV PAR FOURNISSEUR - MA KAY 7TACH OPENPYXL
-csv_data = df_mps_fourni.to_csv(index=False).encode('utf-8')
-st.download_button(
-    f"📊 Export CSV {fourni_select}",
-    csv_data,
-    f"Fourni_{fourni_select}_{datetime.now().strftime('%Y%m%d')}.csv",
-    "text/csv"
-)
+            csv_data = df_mps_fourni.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                f"📊 Export CSV {fourni_select}",
+                csv_data,
+                f"Fourni_{fourni_select}_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv"
+            )
         else:
             st.warning(f"Ma kayn 7ta MP m3a {fourni_select} f MRP dyalk")
         
         st.divider()
         
-        # ==================== ALERTES ====================
         st.subheader("🚨 Alertes & Recommandations")
         
         alerts = []
