@@ -3,16 +3,9 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="MRP Pro V4.8 - Live", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.8.1 - Live", page_icon="🚀", layout="wide")
 
-st.markdown("""
-<style>
-.main { background-color: #f5f7fa; }
-div[data-testid="metric-container"] { background-color: #fff; border: 1px solid #e6e6; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0.05); }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🚀 MRP Pro Dashboard V4.8 - Live Google Sheet")
+st.title("🚀 MRP Pro Dashboard V4.8.1 - Live Google Sheet")
 st.caption("Rolling 12M + Toast Alerts + PDF Export + Gantt + Search Global")
 
 # ==================== 1. CONFIG LINKS ====================
@@ -27,25 +20,50 @@ def load_from_gsheet_public():
     try:
         df_param = pd.read_csv(URL_PARAM)
 
+        # --- Conso: n9raw w ncleanew colonnes ---
         df_conso_raw = pd.read_csv(URL_CONSO, header=None)
-        df_conso_raw.columns = df_conso_raw.iloc[1]
+        df_conso_raw.columns = df_conso_raw.iloc[1] # Header f ligne 2
         df_conso = df_conso_raw[2:].reset_index(drop=True)
 
-        df_fournis = pd.read_csv(URL_FOURNIS)
-        df_prev_pf = pd.read_csv(URL_MRP)
+        # Debug: nchoufou chno smiyat les colonnes
+        st.sidebar.write("Colonnes Conso:", df_conso.columns.tolist())
 
-        # --- Nettoyage & Renommage ---
-        df_param = df_param.rename(columns={'code_mp': 'Code_MP', 'designation': 'Désignation', 'lead_time_j': 'Délai', 'moq_kg': 'MOQ', 'stock_secu_actuel': 'Stock_Sécu'})
+        # Nettoyage smiyat colonnes: n7iydo espaces w accents
+        df_conso.columns = df_conso.columns.str.strip().str.replace('\n', ' ')
 
-        df_conso = df_conso.rename(columns={
-            'Ref produit finis': 'Ref_PF', 'CODE matière': 'Code_MP',
-            'conso journaliere MP en KG': 'Conso_U_Unitaire', 'Couverture : 2 semaine NBR OCTABIN': 'Couverture_Octab'
-        })
+        # Mapping flexible - y9lb 3la smiya b7alha
+        col_map_conso = {}
+        for col in df_conso.columns:
+            col_lower = col.lower()
+            if 'ref' in col_lower and 'produit' in col_lower:
+                col_map_conso[col] = 'Ref_PF'
+            elif 'code' in col_lower and 'matière' in col_lower:
+                col_map_conso[col] = 'Code_MP'
+            elif 'conso' in col_lower and 'journaliere' in col_lower:
+                col_map_conso[col] = 'Conso_U_Unitaire'
+            elif 'couverture' in col_lower and 'octabin' in col_lower:
+                col_map_conso[col] = 'Couverture_Octab'
+
+        df_conso = df_conso.rename(columns=col_map_conso)
+
+        # Vérification
+        required_cols = ['Ref_PF', 'Code_MP', 'Conso_U_Unitaire', 'Couverture_Octab']
+        missing = [c for c in required_cols if c not in df_conso.columns]
+        if missing:
+            st.error(f"Colonnes manquantes f Conso: {missing}")
+            st.info(f"Colonnes li l9it: {df_conso.columns.tolist()}")
+            return None, None
+
         for col in ['Conso_U_Unitaire', 'Couverture_Octab']:
             df_conso[col] = pd.to_numeric(df_conso[col], errors='coerce')
         df_conso = df_conso.dropna(subset=['Code_MP', 'Ref_PF'])
         df_conso['Stock_Actuel_MP'] = df_conso['Couverture_Octab'] * df_conso['Conso_U_Unitaire']
 
+        df_fournis = pd.read_csv(URL_FOURNIS)
+        df_prev_pf = pd.read_csv(URL_MRP)
+
+        # --- Param & Fournisseurs ---
+        df_param = df_param.rename(columns={'code_mp': 'Code_MP', 'designation': 'Désignation', 'lead_time_j': 'Délai', 'moq_kg': 'MOQ', 'stock_secu_actuel': 'Stock_Sécu'})
         df_fournis = df_fournis.rename(columns={'code_mp': 'Code_MP', 'nom_fournisseur': 'Fournisseur', 'prix_unitaire_eur': 'Prix_EUR'})
         df_prev_pf = df_prev_pf.rename(columns={'Ref produit finis': 'Ref_PF'})
 
@@ -89,7 +107,6 @@ def load_from_gsheet_public():
 
     except Exception as e:
         st.error(f"Erreur f chargement mn Google Sheet: {e}")
-        st.info("Vérifi: Wach pubititi les 4 sheets kamlin b CSV?")
         return None, None
 
 # ==================== 3. CHARGEMENT ====================
@@ -103,7 +120,7 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 4. INTERFACE V4.8 ====================
+# ==================== 4. INTERFACE V4.8.1 ====================
 tab1, tab2, tab3 = st.tabs(["📊 Vue Globale", "⚠️ Alertes & Projection", "🏢 Fourni 360"])
 
 with tab1:
