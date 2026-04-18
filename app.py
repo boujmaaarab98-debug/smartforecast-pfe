@@ -177,14 +177,12 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         statut_ia = "✅ Sécurisé"
 
         if ecart < 0:
-            # F RUPTURE = URGENT = COMMANDER AUJOURD'HUI
             qte_suggeree_ia = max(abs(ecart), eoq, moq)
             statut_ia = "🔴 Urgent"
             risque_pct = 100
             date_rupture = date_actuelle
-            date_cmd_optimale = date_actuelle # Fat l 7al, khas daba!
+            date_cmd_optimale = date_actuelle
         else:
-            # MAZAL MA F RUPTURE
             if date_rupture:
                 date_cmd_optimale = date_rupture - timedelta(days=lead_time)
                 jours_avant_cmd = (date_cmd_optimale - date_actuelle).days
@@ -192,7 +190,7 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 
                 if jours_avant_cmd <= 0:
                     statut_ia = "🔴 Urgent"
-                    date_cmd_optimale = date_actuelle # Fat l wa9t
+                    date_cmd_optimale = date_actuelle
                 elif jours_avant_cmd <= 7:
                     statut_ia = "🟠 À Planifier"
                 else:
@@ -636,4 +634,4 @@ with tab6:
                 r = f"📅 **Plan Commande IA - {len(df_c)} MPs:**\n\n"
                 for _, row in df_c.head(10).iterrows():
                     d = row['Date_Cmd_Optimale'].strftime('%d/%m')
-                    r += f"**{d}**: {
+                    r += f"**{d
