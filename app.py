@@ -635,14 +635,4 @@ with tab6:
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("Ex: 'Plan commande?' 'Prévision MP_PP?' 'Risque rupture?'"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        prompt_lower = prompt.lower()
-        response = ""
-
-        if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
-            if len(df_cmd) > 0:
-                response = f"📅 **Plan Commande
+        st.session_state.messages.append({"role": "user", "content": prompt
