@@ -614,15 +614,14 @@ with tab7:
             )
             
             # EXPORT EXCEL PAR FOURNISSEUR
-            excel_buf = BytesIO()
-            df_mps_fourni.to_excel(excel_buf, index=False, engine='openpyxl')
-            excel_buf.seek(0)
-            st.download_button(
-                f"📊 Export Excel {fourni_select}",
-                excel_buf,
-                f"Fourni_{fourni_select}_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+           # EXPORT CSV PAR FOURNISSEUR - MA KAY 7TACH OPENPYXL
+csv_data = df_mps_fourni.to_csv(index=False).encode('utf-8')
+st.download_button(
+    f"📊 Export CSV {fourni_select}",
+    csv_data,
+    f"Fourni_{fourni_select}_{datetime.now().strftime('%Y%m%d')}.csv",
+    "text/csv"
+)
         else:
             st.warning(f"Ma kayn 7ta MP m3a {fourni_select} f MRP dyalk")
         
