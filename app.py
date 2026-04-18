@@ -6,16 +6,16 @@ from datetime import datetime, timedelta
 import numpy as np
 from io import BytesIO
 
-st.set_page_config(page_title="MRP Pro V4.13 - Full KPIs", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.13.1 - Full KPIs", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.13 - KPIs Professionnels Complets")
+st.title("🚀 MRP Pro Dashboard V4.13.1 - KPIs Professionnels Complets")
 st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Saisonnalité + Forecast + Export")
 
 # ==================== 1. SEUILS PROFESSIONNELS ====================
 SEUIL_ROUGE = 4
 SEUIL_ORANGE = 6
 SEUIL_SECURITE = 12
-SEUIL_VOLATILITE = 50 # CV% > 50 = Volatile
+SEUIL_VOLATILITE = 50
 
 st.sidebar.info(f"""
 **🔴 Rouge:** < {SEUIL_ROUGE} jours
@@ -34,12 +34,12 @@ URL_MRP = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAm
 def clean_numeric(series):
     return pd.to_numeric(
         series.astype(str)
-     .str.replace(' ', '')
-     .str.replace(',', '.')
-     .str.replace('€', '')
-     .str.replace('KG', '')
-     .str.replace('kg', '')
-     .str.strip(),
+      .str.replace(' ', '')
+      .str.replace(',', '.')
+      .str.replace('€', '')
+      .str.replace('KG', '')
+      .str.replace('kg', '')
+      .str.strip(),
         errors='coerce'
     )
 
@@ -76,7 +76,7 @@ def load_full_data():
             'CODE matière': 'Code_MP',
             'conso journaliere MP en KG': 'Conso_U_Unitaire',
             'Couverture : 2 semaine NBR OCTABIN': 'Couverture_Octab',
-            'Projet': 'Projet' # N7afdo 3lih l correlation
+            'Projet': 'Projet'
         })
         df_conso['Conso_U_Unitaire'] = clean_numeric(df_conso['Conso_U_Unitaire'])
         df_conso['Couverture_Octab'] = clean_numeric(df_conso['Couverture_Octab'])
@@ -155,7 +155,7 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 6. INTERFACE V4.13 ====================
+# ==================== 6. INTERFACE V4.13.1 ====================
 tab1, tab2, tab3, tab4 = st.tabs(["📊 MRP Complet", "📈 KPIs Conso & Prévision PRO", "⚠️ Alertes", "🏢 Fournisseurs"])
 
 with tab1:
@@ -165,7 +165,21 @@ with tab1:
     col2.metric("🟠 Orange <6j", df_mrp[df_mrp['Statut'] == 'Orange'].shape[0])
     col3.metric("🟡 Alerte <12j", df_mrp[df_mrp['Statut'] == 'Alerte'].shape[0])
     col4.metric("🟢 OK >12j", df_mrp[df_mrp['Statut'] == 'OK'].shape[0])
-    st.dataframe(df_mrp, use_container_width=True, height=600)
+
+    def highlight_statut(row):
+        if row['Statut'] == 'Rouge':
+            return ['background-color: #ffcccc'] * len(row)
+        elif row['Statut'] == 'Orange':
+            return ['background-color: #ffe4cc'] * len(row)
+        elif row['Statut'] == 'Alerte':
+            return ['background-color: #ffffcc'] * len(row)
+        else:
+            return ['background-color: #ccffcc'] * len(row)
+
+    st.dataframe(df_mrp.style.apply(highlight_statut, axis=1).format({
+        'Stock': '{:,.0f}', 'Consommation_J': '{:,.1f}', 'Couverture_J': '{:.1f}',
+        'Stock_Sécu': '{:,.0f}', 'Écart': '{:,.0f}', 'Valeur_Risque_EUR': '€ {:,.0f}', 'Prix_EUR': '€ {:.2f}'
+    }), use_container_width=True, height=600)
 
 with tab2:
     st.header("📈 KPIs Consommation & Prévision - Niveau Professionnel")
@@ -177,7 +191,6 @@ with tab2:
     conso_moy['CV_%'] = (conso_moy['Volatilité_StdDev'] / conso_moy['Conso_Moy_KG'] * 100).round(1)
     conso_moy = conso_moy.fillna(0)
 
-    # Alerte Volatilité
     volatile = conso_moy[conso_moy['CV_%'] > SEUIL_VOLATILITE]
     if not volatile.empty:
         st.warning(f"⚠️ {len(volatile)} MP 3ndha volatilité > {SEUIL_VOLATILITE}%: {', '.join(volatile['Code_MP'].head(5).tolist())}...")
@@ -215,14 +228,12 @@ with tab2:
     correl = correl.sort_values('Conso_U_Unitaire', ascending=False)
     st.dataframe(correl.head(20), use_container_width=True, height=250)
 
-    # ===== KPI 5: Forecast 6 Mois =====
+    # ===== KPI 5: Forecast 6 Mois - FIX =====
     st.subheader("5️⃣ Forecast Consommation 6 Mois Jiyin")
     conso_mensuelle = df_besoin_jour.copy()
     conso_mensuelle['Mois'] = conso_mensuelle['Date'].dt.to_period('M')
     conso_mensuelle_sum = conso_mensuelle.groupby('Mois')['Besoin_MP_KG'].sum().reset_index()
-    conso_mensuelle_sum['Mois'] = conso_mensuelle_sum['Mois'].astype(str)
 
-    # Tendance linéaire simple
     if len(conso_mensuelle_sum) > 2:
         x = np.arange(len(conso_mensuelle_sum))
         y = conso_mensuelle_sum['Besoin_MP_KG'].values
@@ -232,11 +243,16 @@ with tab2:
         forecast_y = p(forecast_x)
 
         fig_forecast = go.Figure()
-        fig_forecast.add_trace(go.Scatter(x=conso_mensuelle_sum['Mois'], y=y, mode='lines+markers', name='Historique'))
-        future_months = pd.date_range(start=conso_mensuelle_sum['Mois'].iloc[-1], periods=7, freq='M')[1:]
+        dates_histo = conso_mensuelle_sum['Mois'].dt.to_timestamp()
+        fig_forecast.add_trace(go.Scatter(x=dates_histo, y=y, mode='lines+markers', name='Historique'))
+
+        last_date = conso_mensuelle_sum['Mois'].iloc[-1].to_timestamp()
+        future_months = pd.date_range(start=last_date, periods=7, freq='ME')[1:]
         fig_forecast.add_trace(go.Scatter(x=future_months, y=forecast_y, mode='lines+markers', name='Forecast', line=dict(dash='dash')))
         fig_forecast.update_layout(title="Forecast 6 Mois - Tendance Linéaire")
         st.plotly_chart(fig_forecast, use_container_width=True)
+    else:
+        st.info("Ma kaynach data kafya bach ndir forecast. Khassk au moins 3 mois d'historique.")
 
     # ===== KPI 6: Stockout Simulé =====
     st.subheader("6️⃣ Date Prévue dyal Rupture Stock")
@@ -251,7 +267,7 @@ with tab2:
     besoin_30j = df_besoin_jour[df_besoin_jour['Date'] <= datetime.now() + timedelta(days=30)].groupby('Code_MP')['Besoin_MP_KG'].sum().reset_index()
     besoin_30j.columns = ['Code_MP', 'Besoin_30j_KG']
     df_moq_opt = pd.merge(df_mrp[['Code_MP', 'MOQ_Param', 'Consommation_J']], besoin_30j, on='Code_MP', how='left').fillna(0)
-    df_moq_opt['MOQ_Suggéré'] = (df_moq_opt['Consommation_J'] * 30).round(0) # 1 mois conso
+    df_moq_opt['MOQ_Suggéré'] = (df_moq_opt['Consommation_J'] * 30).round(0)
     df_moq_opt['Économie'] = (df_moq_opt['MOQ_Param'] - df_moq_opt['MOQ_Suggéré']).clip(lower=0)
     df_moq_opt = df_moq_opt[df_moq_opt['Économie'] > 0].sort_values('Économie', ascending=False)
     st.dataframe(df_moq_opt[['Code_MP', 'MOQ_Param', 'MOQ_Suggéré', 'Économie']], use_container_width=True, height=250)
