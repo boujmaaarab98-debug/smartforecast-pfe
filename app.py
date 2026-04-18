@@ -4,14 +4,57 @@ import numpy as np
 from prophet import Prophet
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.units import inch
 
 # ========================================
-# CONFIG
+# CONFIG + CSS PRO
 # ========================================
 SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-st.set_page_config(page_title="MRP Pro Dashboard V4.7", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="MRP Pro Dashboard V4.8", layout="wide", page_icon="🚀")
+
+# CSS KPI CARDS ZWININ
+st.markdown("""
+<style>
+.kpi-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+    border-radius: 15px;
+    color: white;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
+}
+.kpi-card-red {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+.kpi-card-green {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+.kpi-card-orange {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+.kpi-value {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 5px 0;
+}
+.kpi-label {
+    font-size: 14px;
+    opacity: 0.9;
+}
+.kpi-trend {
+    font-size: 12px;
+    margin-top: 5px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ========================================
 # FONCTIONS UTILITAIRES
@@ -64,6 +107,61 @@ def classification_abc(df):
     df['Cumul_%'] = df['Cumul'] / total * 100 if total > 0 else 0
     df['Classe'] = df['Cumul_%'].apply(lambda x: 'A' if x <= 80 else ('B' if x <= 95 else 'C'))
     return df
+
+def generer_pdf_plan_appro(df_ia):
+    """Génère PDF Plan Appro IA"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Titre
+    title = Paragraph(f"<b>Plan d'Approvisionnement IA</b><br/>Date: {datetime.now().strftime('%d/%m/%Y')}", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+
+    # Tableau
+    data = [['Code MP', 'Désignation', 'Statut', 'Cmd Avant', 'Qté (kg)', 'Fournisseur']]
+    for _, row in df_ia.iterrows():
+        data.append([
+            row['Code_MP'],
+            row['Désignation'][:20],
+            row['Statut_IA'],
+            row['Date_Cmd_Optimale'].strftime('%d/%m/%Y'),
+            f"{row['Qté_Suggérée_IA']:,.0f}",
+            row['Fournisseur'][:15]
+        ])
+
+    table = Table(data, colWidths=[1*inch, 1.5*inch, 1*inch, 1*inch, 1*inch, 1.2*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(table)
+
+    # Total
+    total_val = (df_ia['Qté_Suggérée_IA'] * df_ia['Cout_Unit']).sum()
+    total_text = Paragraph(f"<br/><b>Valeur Totale Commandes: {total_val:,.0f} MAD</b>", styles['Normal'])
+    elements.append(total_text)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+def kpi_card_html(label, value, trend, icon, color_class=""):
+    return f"""
+    <div class="kpi-card {color_class}">
+        <div class="kpi-label">{icon} {label}</div>
+        <div class="kpi-value">{value}</div>
+        <div class="kpi-trend">{trend}</div>
+    </div>
+    """
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
     col_mp_param = trouver_colonne(param, ['code_mp'])
@@ -171,7 +269,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
         eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
         point_commande = conso_moy_j * lead_time
 
-        # ============= V4.7 FIX: LOGIQUE JDIDA DYAL DATES =============
         date_cmd_optimale = None
         qte_suggeree_ia = 0
         statut_ia = "✅ Sécurisé"
@@ -195,7 +292,6 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
                     statut_ia = "🟠 À Planifier"
                 else:
                     statut_ia = "🟡 Surveiller"
-        # ============= FIN FIX =============
 
         if len(hist) == 0:
             statut = "⚪ PAS DE DONNÉES"
@@ -262,23 +358,13 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🤖 MRP Pro Dashboard V4.7 - Logique Corrigée")
-st.caption("Rolling 12 Mois + Commander Avant = Aujourd'hui si Urgent")
+st.title("🚀 MRP Pro Dashboard V4.8 - PRO MAX")
+st.caption("Rolling 12M + Toast Alerts + PDF Export + Gantt + Search Global")
 
 param, conso, mrp, fournis = charger_donnees_google()
 
 if param is None:
     st.stop()
-
-# ========================================
-# SIDEBAR
-# ========================================
-st.sidebar.header("⚙️ Configuration")
-st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
-
-if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
-    st.cache_data.clear()
-    st.rerun()
 
 df_result, forecasts, df_fournis_all = analyser_mrp_appro(param, conso, mrp, fournis)
 
@@ -286,25 +372,54 @@ if len(df_result) == 0:
     st.warning("Aucun MP dans Param")
     st.stop()
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Dashboard", "🤖 Plan Appro IA", "📅 Prévisions Mensuelles", "🏭 Fournisseurs", "🎯 Simulateur", "💬 Chat IA"])
+# ========================================
+# TOAST NOTIFICATIONS - URGENTS
+# ========================================
+urgents = df_result[df_result['Statut_IA'].str.contains('Urgent')]
+if len(urgents) > 0:
+    codes_urgents = ", ".join(urgents['Code_MP'].head(3).tolist())
+    if len(urgents) > 3:
+        codes_urgents += f" + {len(urgents)-3} autres"
+    st.toast(f"🔴 URGENT: {codes_urgents} - Commander lyoum!", icon='🔥')
+
+# ========================================
+# SIDEBAR + SEARCH GLOBAL
+# ========================================
+st.sidebar.header("⚙️ Configuration")
+st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
+
+# SEARCH GLOBAL
+search_query = st.sidebar.text_input("🔍 Search Global", placeholder="Code MP, Désignation, Fournisseur...")
+if search_query:
+    mask = df_result.apply(lambda row: search_query.lower() in str(row).lower(), axis=1)
+    df_result = df_result[mask]
+    st.sidebar.success(f"✅ {len(df_result)} résultats")
+
+if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
+
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Dashboard", "🤖 Plan Appro IA", "📅 Prévisions", "🏭 Fournisseurs", "🎯 Simulateur", "💬 Chat IA"])
 
 with tab1:
-    st.subheader("📊 KPIs Globaux")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    st.subheader("📊 KPIs Globaux - Version Pro")
+
+    # KPI CARDS ZWININ
+    col1, col2, col3, col4 = st.columns(4)
 
     total_mp = len(df_result)
     critiques = len(df_result[df_result['Statut'].str.contains('CRITIQUE')])
     urgents_ia = len(df_result[df_result['Statut_IA'].str.contains('Urgent')])
-    classe_a = len(df_result[df_result['Classe'] == 'A'])
     valeur_risque_tot = df_result['Valeur_Risque'].sum()
-    couverture_moy = df_result[df_result['Couverture_J'] < 999]['Couverture_J'].mean()
 
-    col1.metric("📦 Total MPs", total_mp)
-    col2.metric("🔴 Critiques", critiques)
-    col3.metric("🤖 Urgents IA", urgents_ia)
-    col4.metric("💎 Classe A", classe_a)
-    col5.metric("💰 Valeur Risque", f"{valeur_risque_tot:,.0f} MAD")
-    col6.metric("📅 Couv. Moy", f"{couverture_moy:.0f}j")
+    with col1:
+        st.markdown(kpi_card_html("Total MPs", total_mp, "↑ Actif", "📦", ""), unsafe_allow_html=True)
+    with col2:
+        st.markdown(kpi_card_html("Critiques", critiques, "⚠️ Attention", "🔴", "kpi-card-red"), unsafe_allow_html=True)
+    with col3:
+        st.markdown(kpi_card_html("Urgents IA", urgents_ia, "🔥 Action", "🤖", "kpi-card-orange"), unsafe_allow_html=True)
+    with col4:
+        st.markdown(kpi_card_html("Valeur Risque", f"{valeur_risque_tot:,.0f}", "MAD", "💰", "kpi-card-green"), unsafe_allow_html=True)
 
     st.divider()
     st.subheader(f"📋 Détail par MP - {total_mp} MPs")
@@ -324,13 +439,17 @@ with tab1:
         }
     )
 
-    csv = df_filtre.to_csv(index=False).encode('utf-8-sig')
-    st.download_button("📥 Télécharger CSV", csv, f"MRP_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
-
 with tab2:
     st.subheader("🤖 Plan d'Approvisionnement IA")
-    st.caption("Commander Avant = Aujourd'hui ila rak f rupture")
-    st.info("💡 **Logique V4.7:** Ila `Statut_IA = Urgent`, `Commander Avant = Aujourd'hui` 7it khas tcommandi daba!")
+
+    col_btn1, col_btn2 = st.columns([3, 1])
+    with col_btn2:
+        df_ia_export = df_result[df_result['Date_Cmd_Optimale'].notna()].copy()
+        if len(df_ia_export) > 0:
+            pdf_buffer = generer_pdf_plan_appro(df_ia_export)
+            st.download_button("📄 Export PDF", pdf_buffer, f"Plan_Appro_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
+
+    st.info("💡 **Logique V4.7:** Ila `Statut_IA = Urgent`, `Commander Avant = Aujourd'hui`")
 
     df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy()
     df_ia = df_ia.sort_values('Date_Cmd_Optimale')
@@ -363,42 +482,36 @@ with tab2:
             }
         )
 
-        st.subheader("📅 Timeline Commandes - 90 prochains jours")
-        df_timeline = df_ia[df_ia['Date_Cmd_Optimale'] <= datetime.now().date() + timedelta(days=90)].copy()
+        st.subheader("📊 Gantt Chart - Commandes 90 Jours")
+        df_gantt = df_ia[df_ia['Date_Cmd_Optimale'] <= datetime.now().date() + timedelta(days=90)].copy()
 
-        if len(df_timeline) > 0:
-            fig = go.Figure()
-            for _, row in df_timeline.iterrows():
-                color = '#FF6B6B' if 'Urgent' in row['Statut_IA'] else '#FFA500' if 'Planifier' in row['Statut_IA'] else '#4ECDC4'
-                fig.add_trace(go.Scatter(
-                    x=[row['Date_Cmd_Optimale']],
-                    y=[row['Code_MP']],
-                    mode='markers+text',
-                    marker=dict(size=row['Risque_%']/2 + 10, color=color),
-                    text=[f"{row['Qté_Suggérée_IA']:,.0f} kg"],
-                    textposition="middle right",
-                    name=row['Code_MP'],
-                    hovertext=f"Commander {row['Qté_Suggérée_IA']:,.0f} kg<br>Chez {row['Fournisseur']}<br>Risque: {row['Risque_%']:.0f}%"
+        if len(df_gantt) > 0:
+            gantt_data = []
+            for _, row in df_gantt.iterrows():
+                start_date = row['Date_Cmd_Optimale']
+                end_date = start_date + timedelta(days=row['Délai'])
+                gantt_data.append(dict(
+                    Task=row['Code_MP'],
+                    Start=start_date,
+                    Finish=end_date,
+                    Resource=row['Statut_IA']
                 ))
 
-            fig.update_layout(
-                title="Calendrier Commandes Optimales",
-                xaxis_title="Date Commande",
-                yaxis_title="MP",
-                height=400,
-                showlegend=False
+            fig_gantt = ff.create_gantt(
+                gantt_data,
+                colors={'🔴 Urgent': 'rgb(245, 87, 108)', '🟠 À Planifier': 'rgb(255, 165, 0)', '🟡 Surveiller': 'rgb(78, 205, 196)'},
+                index_col='Resource',
+                show_colorbar=True,
+                group_tasks=True,
+                title='Timeline Commandes avec Lead Time'
             )
-            st.plotly_chart(fig, use_container_width=True)
-
-        csv_ia = df_ia.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 Télécharger Plan Appro IA", csv_ia, f"Plan_Appro_IA_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+            fig_gantt.update_layout(height=400)
+            st.plotly_chart(fig_gantt, use_container_width=True)
 
 with tab3:
     st.subheader("📅 Prévisions Mensuelles - Rolling 12 Mois")
-    st.caption("Basé 3la akhr 12 chehar. Kay t'actualisa wa7do kola chehar.")
 
     df_prev = df_result[['Code_MP', 'Désignation', 'Prév_M+1', 'Prév_M+2', 'Prév_M+3', 'Conso_Moy_J']].copy()
-
     mois1 = (datetime.now() + relativedelta(months=1)).strftime('%b %Y')
     mois2 = (datetime.now() + relativedelta(months=2)).strftime('%b %Y')
     mois3 = (datetime.now() + relativedelta(months=3)).strftime('%b %Y')
@@ -410,39 +523,10 @@ with tab3:
         'Conso_Moy_J': 'Moy/J (kg)'
     })
 
-    st.dataframe(
-        df_prev,
-        use_container_width=True,
-        height=400,
-        column_config={
-            f'Prév {mois1}': st.column_config.NumberColumn(format="%.0f kg"),
-            f'Prév {mois2}': st.column_config.NumberColumn(format="%.0f kg"),
-            f'Prév {mois3}': st.column_config.NumberColumn(format="%.0f kg"),
-            'Moy/J (kg)': st.column_config.NumberColumn(format="%.0f")
-        }
-    )
-
-    mp_select_prev = st.selectbox("Choisir MP pour voir évolution", df_result['Code_MP'].unique())
-    mp_data_prev = df_result[df_result['Code_MP'] == mp_select_prev].iloc[0]
-
-    fig_prev = go.Figure()
-    fig_prev.add_trace(go.Bar(
-        x=[mois1, mois2, mois3],
-        y=[mp_data_prev['Prév_M+1'], mp_data_prev['Prév_M+2'], mp_data_prev['Prév_M+3']],
-        marker_color=['#4ECDC4', '#FFA500', '#FF6B6B'],
-        text=[f"{mp_data_prev['Prév_M+1']:,.0f}", f"{mp_data_prev['Prév_M+2']:,.0f}", f"{mp_data_prev['Prév_M+3']:,.0f}"],
-        textposition='auto'
-    ))
-    fig_prev.update_layout(
-        title=f"Prévision Conso {mp_select_prev} - 3 Mois Prochains",
-        yaxis_title="Kg",
-        height=350
-    )
-    st.plotly_chart(fig_prev, use_container_width=True)
+    st.dataframe(df_prev, use_container_width=True, height=400)
 
 with tab4:
     st.subheader("🏭 Analyse Fournisseurs")
-    st.write(f"**Total fournisseurs:** {len(df_fournis_all)}")
 
     df_fourni_score = df_result[df_result['Fournisseur']!= 'N/A'].groupby('Fournisseur').agg({
         'Score_Fourni': 'mean',
@@ -462,84 +546,17 @@ with tab4:
             fig2 = px.pie(df_fourni_score, values='Valeur_Risque', names='Fournisseur', title="Valeur à Risque")
             st.plotly_chart(fig2, use_container_width=True)
 
-    st.divider()
-    st.subheader("📦 Quantité Commandes à Passer par Fournisseur")
-
-    nb_jours = st.slider("Chouf les commandes dyal ch7al mn jour l9ddam:", 30, 180, 90, step=30)
-
-    date_limite = datetime.now().date() + timedelta(days=nb_jours)
-    df_cmd_fourni = df_result[
-        (df_result['Date_Cmd_Optimale'].notna()) &
-        (df_result['Date_Cmd_Optimale'] <= date_limite)
-    ].copy()
-
-    if len(df_cmd_fourni) > 0:
-        df_cmd_fourni['Valeur_Cmd'] = df_cmd_fourni['Qté_Suggérée_IA'] * df_cmd_fourni['Cout_Unit']
-        df_valeur_fourni = df_cmd_fourni.groupby('Fournisseur').agg({
-            'Valeur_Cmd': 'sum',
-            'Qté_Suggérée_IA': 'sum',
-            'Code_MP': 'count'
-        }).reset_index().rename(columns={'Code_MP': 'Nb_MPs_À_Cmd', 'Qté_Suggérée_IA': 'Qté_Totale_kg'})
-        df_valeur_fourni = df_valeur_fourni.sort_values('Qté_Totale_kg', ascending=False)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            fig_val = px.bar(
-                df_valeur_fourni,
-                x='Fournisseur',
-                y='Qté_Totale_kg',
-                title=f"Quantité Commandes - {nb_jours} jours",
-                color='Qté_Totale_kg',
-                color_continuous_scale='Blues',
-                text='Nb_MPs_À_Cmd',
-                labels={'Qté_Totale_kg': 'Quantité (kg)', 'Nb_MPs_À_Cmd': 'Nb MPs'}
-            )
-            fig_val.update_traces(texttemplate='%{text} MPs', textposition='outside')
-            fig_val.update_layout(yaxis_title="Quantité Commande (kg)")
-            st.plotly_chart(fig_val, use_container_width=True)
-
-        with col2:
-            fig_pie_cmd = px.pie(
-                df_valeur_fourni,
-                values='Qté_Totale_kg',
-                names='Fournisseur',
-                title=f"Répartition Quantité - {nb_jours} jours",
-                hole=0.4
-            )
-            st.plotly_chart(fig_pie_cmd, use_container_width=True)
-
-        st.dataframe(
-            df_valeur_fourni.rename(columns={
-                'Valeur_Cmd': 'Valeur Commande (MAD)',
-                'Qté_Totale_kg': 'Qté Totale (kg)',
-                'Nb_MPs_À_Cmd': 'Nb MPs'
-            }),
-            use_container_width=True,
-            column_config={
-                'Valeur Commande (MAD)': st.column_config.NumberColumn(format="%.0f"),
-                'Qté Totale (kg)': st.column_config.NumberColumn(format="%.0f")
-            }
-        )
-
-        st.metric("📦 Total Quantité", f"{df_valeur_fourni['Qté_Totale_kg'].sum():,.0f} kg", f"{nb_jours} jours")
-    else:
-        st.success(f"✅ Aucune commande prévue f {nb_jours} jours l9ddam!")
-
-    st.divider()
-    st.subheader("📋 Détail Tous Fournisseurs")
     st.dataframe(df_fournis_all, use_container_width=True)
 
 with tab5:
     st.subheader("🎯 Simulateur What-If - VERSION VISUELLE")
-    st.caption("Chouf l'impact dyal commande 9bl ma dirha 📊")
 
     col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v7")
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v7")
+    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v8")
+    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v8")
 
     mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0].copy()
 
-    # Fix NaN bach Plotly ma yt9ll9ch
     for col in ['Stock', 'Écart', 'Couverture_J', 'Conso_Moy_J']:
         if pd.isna(mp_data_sim[col]):
             mp_data_sim[col] = 0
@@ -549,8 +566,6 @@ with tab5:
     nouvelle_couv = nouveau_stock / mp_data_sim['Conso_Moy_J'] if mp_data_sim['Conso_Moy_J'] > 0 else 999
 
     st.divider()
-    st.subheader(f"📊 Impact Visuel - {mp_sim}")
-
     col_g1, col_g2, col_g3 = st.columns(3)
 
     with col_g1:
@@ -604,11 +619,11 @@ with tab5:
     col4.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
 
     if nouveau_ecart >= 0:
-        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**! Couverture {nouvelle_couv:.0f} jours. Plus de risque! 🎉")
+        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**!")
     elif nouveau_ecart >= -mp_data_sim['EOQ']:
-        st.warning(f"🟠 **VERDICT: TENSION** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+        st.warning(f"🟠 **VERDICT: TENSION** → **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
     else:
-        st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+        st.error(f"🔴 **VERDICT: CRITIQUE** → **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
 
 with tab6:
     st.subheader("💬 Chat IA Pro - Version Stable")
@@ -627,7 +642,7 @@ with tab6:
             st.markdown(prompt)
 
         p = prompt.lower()
-        
+
         if "plan" in p or "commande" in p:
             df_c = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
             if len(df_c) > 0:
@@ -639,41 +654,5 @@ with tab6:
                 r = "\n".join(lines)
             else:
                 r = "✅ **Kolchi sécurisé!** Ma kayn 7ta commande."
-        
-        elif "prevision" in p or "prev" in p:
-            lines = ["📊 **Prévisions 3 Mois:**\n"]
-            for _, row in df_result.iterrows():
-                lines.append(f"**{row['Code_MP']}**: {row['Prév_M+1']:,.0f} / {row['Prév_M+2']:,.0f} / {row['Prév_M+3']:,.0f} kg")
-            r = "\n".join(lines)
-        
-        elif "risque" in p:
-            crit = df_result[df_result['Risque_%'] > 50]
-            if len(crit) > 0:
-                lines = [f"⚠️ **{len(crit)} MPs f Risque:**\n"]
-                for _, row in crit.iterrows():
-                    lines.append(f"**{row['Code_MP']}**: {row['Risque_%']:.0f}% - {row['Action']}")
-                r = "\n".join(lines)
-            else:
-                r = "✅ **Ma kayn 7ta risque!**"
-        
-        elif "abc" in p or "classe" in p:
-            ca = df_result[df_result['Classe'] == 'A']
-            lines = [f"💎 **Classe A - {len(ca)} MPs:**\n"]
-            for _, row in ca.iterrows():
-                lines.append(f"**{row['Code_MP']}**: {row['Valeur_Risque']:,.0f} MAD")
-            r = "\n".join(lines)
-        
-        elif "fournisseur" in p:
-            df_f = df_result[df_result['Fournisseur'] != 'N/A'].groupby('Fournisseur')['Valeur_Risque'].sum()
-            lines = ["🏭 **Valeur à Risque:**\n"]
-            for f, v in df_f.items():
-                if v > 0:
-                    lines.append(f"**{f}**: {v:,.0f} MAD")
-            r = "\n".join(lines) if df_f.sum() > 0 else "✅ **Ma kayn 7ta risque!**"
-        
-        else:
-            r = "🤖 **Swwlni 3la:**\n- `plan commande`\n- `prévision`\n- `risque`\n- `classe A`\n- `fournisseur`"
 
-        st.session_state.messages.append({"role": "assistant", "content": r})
-        with st.chat_message("assistant"):
-            st.markdown(r)
+        elif "prev
