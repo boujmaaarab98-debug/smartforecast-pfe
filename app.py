@@ -625,7 +625,8 @@ with tab5:
         st.error(f"🔴 **VERDICT: CRITIQUE** → Avec {qte_sim:,.0f} kg, **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda!")
 
 with tab6:
-    st.subheader("💬 Chat IA Pro")
+    st.subheader("💬 Chat IA Pro - Version Simplifiée")
+    st.caption("Version bla mochkil dyal syntax ✅")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -634,13 +635,57 @@ with tab6:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Ex: 'Plan commande?' 'Prévision MP_PP?' 'Risque rupture?'"):
+    if prompt := st.chat_input("Swwl 3la: plan commande, prévision, risque, classe A, fournisseur"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        prompt_lower = prompt.lower()
-        response = ""
+        p = prompt.lower()
+        r = ""
+        
+        if "plan" in p or "commande" in p:
+            df_c = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Optimale')
+            if len(df_c) > 0:
+                r = f"📅 **Plan Commande IA - {len(df_c)} MPs:**\n\n"
+                for _, row in df_c.head(10).iterrows():
+                    d = row['Date_Cmd_Optimale'].strftime('%d/%m')
+                    r += f"**{d}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg chez {row['Fournisseur']} ({row['Statut_IA']})\n"
+                r += f"\n💰 **Total:** {(df_c['Qté_Suggérée_IA'] * df_c['Cout_Unit']).sum():,.0f} MAD"
+            else:
+                r = "✅ **Kolchi sécurisé!** Ma kayn 7ta commande à planifier."
+        
+        elif "prévision" in p or "prevision" in p:
+            r = "📊 **Prévisions 3 Mois Prochains:**\n\n"
+            for _, row in df_result.iterrows():
+                r += f"**{row['Code_MP']}**: {row['Prév_M+1']:,.0f} / {row['Prév_M+2']:,.0f} / {row['Prév_M+3']:,.0f} kg\n"
+        
+        elif "risque" in p or "rupture" in p:
+            crit = df_result[df_result['Risque_%'] > 50]
+            if len(crit) > 0:
+                r = f"⚠️ **{len(crit)} MPs f Risque Élevé:**\n\n"
+                for _, row in crit.iterrows():
+                    r += f"**{row['Code_MP']}**: {row['Risque_%']:.0f}% risque - {row['Action']}\n"
+            else:
+                r = "✅ **Ma kayn 7ta risque critique!** Kolchi mzyan."
+        
+        elif "abc" in p or "classe" in p:
+            ca = df_result[df_result['Classe'] == 'A']
+            r = f"💎 **Classe A - {len(ca)} MPs critiques:**\n\n"
+            for _, row in ca.iterrows():
+                r += f"**{row['Code_MP']}**: {row['Valeur_Risque']:,.0f} MAD à risque - {row['Statut']}\n"
+        
+        elif "fournisseur" in p:
+            df_f = df_result[df_result['Fournisseur'] != 'N/A'].groupby('Fournisseur')['Valeur_Risque'].sum().sort_values(ascending=False)
+            r = "🏭 **Valeur à Risque par Fournisseur:**\n\n"
+            for f, v in df_f.items():
+                if v > 0:
+                    r += f"**{f}**: {v:,.0f} MAD\n"
+            if df_f.sum() == 0:
+                r = "✅ **Ma kayn 7ta risque chez fournisseurs!**"
+        
+        else:
+            r = "🤖 **Ana hna!** Swwlni 3la:\n- `plan commande` - Chnou n commandi\n- `prévision` - Ch7al ghadi nconsommi\n- `risque` - Chkoun f khatar\n- `classe A` - MPs critiques\n- `fournisseur` - Analyse fournisseurs"
 
-        if "plan" in prompt_lower or "commande" in prompt_lower:
-            df_cmd = df_result[df_result['Date_Cmd_Optimale'].notna()].sort_values('Date_Cmd_Opt
+        st.session_state.messages.append({"role": "assistant", "content": r})
+        with st.chat_message("assistant"):
+            st.markdown(r)
