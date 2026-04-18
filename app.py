@@ -7,10 +7,10 @@ import numpy as np
 from io import BytesIO
 import zipfile
 
-st.set_page_config(page_title="MRP Pro V4.13.2 - Fix Excel", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.13.3 - Stock Fix", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.13.2 - KPIs Professionnels Complets")
-st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Export CSV")
+st.title("🚀 MRP Pro Dashboard V4.13.3 - Stock Mn Param")
+st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Stock = stock_actuel mn Param")
 
 # ==================== 1. SEUILS PROFESSIONNELS ====================
 SEUIL_ROUGE = 4
@@ -35,17 +35,16 @@ URL_MRP = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAm
 def clean_numeric(series):
     return pd.to_numeric(
         series.astype(str)
-    .str.replace(' ', '')
-    .str.replace(',', '.')
-    .str.replace('€', '')
-    .str.replace('KG', '')
-    .str.replace('kg', '')
-    .str.strip(),
+   .str.replace(' ', '')
+   .str.replace(',', '.')
+   .str.replace('€', '')
+   .str.replace('KG', '')
+   .str.replace('kg', '')
+   .str.strip(),
         errors='coerce'
     )
 
 def to_zip_csv(df_dict):
-    """Export multiple dataframes l ZIP dyal CSV - Ma kay7tajch openpyxl"""
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for sheet_name, df in df_dict.items():
@@ -54,22 +53,25 @@ def to_zip_csv(df_dict):
     zip_buffer.seek(0)
     return zip_buffer
 
-# ==================== 4. FONCTION DE CHARGEMENT ====================
+# ==================== 4. FONCTION DE CHARGEMENT - FIX STOCK ====================
 @st.cache_data(ttl=600)
 def load_full_data():
     try:
+        # --- Param - HNA FIN KAYN STOCK S7I7 ---
         df_param = pd.read_csv(URL_PARAM)
         df_param = df_param.rename(columns={
             'code_mp': 'Code_MP',
             'designation': 'Désignation',
             'lead_time_j': 'Délai_Param',
             'moq_kg': 'MOQ_Param',
-            'stock_secu_actuel': 'Stock_Sécu_Sheet'
+            'stock_secu_actuel': 'Stock_Sécu_Sheet',
+            'stock_actuel': 'Stock' # FIX: Hadak howa stock réel
         })
-        for col in ['Délai_Param', 'MOQ_Param', 'Stock_Sécu_Sheet']:
+        for col in ['Délai_Param', 'MOQ_Param', 'Stock_Sécu_Sheet', 'Stock']:
             if col in df_param.columns:
                 df_param[col] = clean_numeric(df_param[col])
 
+        # --- Conso - Ghir l conso dyal PF ---
         df_conso = pd.read_csv(URL_CONSO)
         df_conso = df_conso.rename(columns={
             'Ref produit finis': 'Ref_PF',
@@ -80,9 +82,10 @@ def load_full_data():
         })
         df_conso['Conso_U_Unitaire'] = clean_numeric(df_conso['Conso_U_Unitaire'])
         df_conso['Couverture_Octab'] = clean_numeric(df_conso['Couverture_Octab'])
-        df_conso['Stock_Actuel_MP'] = df_conso['Couverture_Octab'] * df_conso['Conso_U_Unitaire']
+        # MA B9INACH KAN7SBO Stock_Actuel_MP MN HNA
         df_conso = df_conso.dropna(subset=['Code_MP', 'Ref_PF'])
 
+        # --- Fournisseurs ---
         df_fournis = pd.read_csv(URL_FOURNIS)
         df_fournis = df_fournis.rename(columns={
             'code_mp': 'Code_MP',
@@ -95,6 +98,7 @@ def load_full_data():
             if col in df_fournis.columns:
                 df_fournis[col] = clean_numeric(df_fournis[col])
 
+        # --- MRP Prévisionnel ---
         df_prev_pf = pd.read_csv(URL_MRP)
         df_prev_pf = df_prev_pf.rename(columns={'Ref produit finis': 'Ref_PF'})
 
@@ -108,9 +112,8 @@ def load_full_data():
         df_besoin_mp['Besoin_MP_KG'] = df_besoin_mp['Qte_PF_Prévue'] * df_besoin_mp['Conso_U_Unitaire']
         df_besoin_jour = df_besoin_mp.groupby(['Code_MP', 'Date'])['Besoin_MP_KG'].sum().reset_index()
 
-        df_mrp = df_param.copy()
-        stock_actuel = df_conso.groupby('Code_MP')['Stock_Actuel_MP'].sum().reset_index().rename(columns={'Stock_Actuel_MP': 'Stock'})
-        df_mrp = pd.merge(df_mrp, stock_actuel, on='Code_MP', how='left')
+        # --- Construction DF_MRP Final - STOCK MN PARAM ---
+        df_mrp = df_param.copy() # Stock deja fih
         df_mrp = pd.merge(df_mrp, df_fournis, on='Code_MP', how='left')
 
         date_fin_30j = datetime.now() + timedelta(days=30)
@@ -151,11 +154,11 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 6. INTERFACE V4.13.2 ====================
+# ==================== 6. INTERFACE V4.13.3 ====================
 tab1, tab2, tab3, tab4 = st.tabs(["📊 MRP Complet", "📈 KPIs Conso & Prévision PRO", "⚠️ Alertes", "🏢 Fournisseurs"])
 
 with tab1:
-    st.header("MRP Complet - Seuils Professionnels")
+    st.header("MRP Complet - Stock Mn Param Sheet")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🔴 Rouge <4j", df_mrp[df_mrp['Statut'] == 'Rouge'].shape[0])
     col2.metric("🟠 Orange <6j", df_mrp[df_mrp['Statut'] == 'Orange'].shape[0])
@@ -244,11 +247,11 @@ with tab2:
     else:
         st.info("Ma kaynach data kafya bach ndir forecast. Khassk au moins 3 mois d'historique.")
 
-    st.subheader("6️⃣ Date Prévue dyal Rupture Stock")
+    st.subheader("6️⃣ Date Prévue dyal Rupture Stock - FIX")
     df_rupture = df_mrp[df_mrp['Consommation_J'] > 0].copy()
     df_rupture['Jours_Ba9i'] = (df_rupture['Stock'] / df_rupture['Consommation_J']).round(0)
     df_rupture['Date_Rupture_Prévue'] = pd.to_datetime(datetime.now()) + pd.to_timedelta(df_rupture['Jours_Ba9i'], unit='D')
-    df_rupture = df_rupture[df_rupture['Jours_Ba9i'] < 60].sort_values('Jours_Ba9i')
+    df_rupture = df_rupture.sort_values('Jours_Ba9i') # Ma b9inach nlimitaw l 60 jours
     st.dataframe(df_rupture[['Code_MP', 'Désignation', 'Stock', 'Consommation_J', 'Jours_Ba9i', 'Date_Rupture_Prévue', 'Statut']], use_container_width=True, height=250)
 
     st.subheader("7️⃣ Suggestion MOQ Optimal")
@@ -260,7 +263,6 @@ with tab2:
     df_moq_opt = df_moq_opt[df_moq_opt['Économie'] > 0].sort_values('Économie', ascending=False)
     st.dataframe(df_moq_opt[['Code_MP', 'MOQ_Param', 'MOQ_Suggéré', 'Économie']], use_container_width=True, height=250)
 
-    # ===== EXPORT ZIP CSV - FIX =====
     st.subheader("📥 Export ZIP - Kolchi KPIs f CSV")
     zip_data = to_zip_csv({
         'KPIs_Conso': conso_moy,
