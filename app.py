@@ -512,4 +512,139 @@ with tab6:
 # W HNA BDDA TAB7
 with tab7:
     st.subheader("🏆 Fournisseur 360 - Dashboard Individuel")
-    ... # code dyal tab7 li 3titk
+    st.caption("Profil kamil dyal kola fournisseur b KPIs w historique")
+
+    # SELECTEUR FOURNISSEUR
+    if df_fournis_all is None or len(df_fournis_all) == 0:
+        st.warning("Ma kaynch données fournisseurs f sheet 'Fournisseurs'")
+        st.stop()
+    
+    liste_fournis = sorted(df_fournis_all['nom_fournisseur'].dropna().unique().tolist())
+    
+    if len(liste_fournis) == 0:
+        st.warning("Ma l9itch smiyat fournisseurs f l sheet")
+        st.stop()
+    
+    fourni_select = st.selectbox("🎯 Khtar Fournisseur", liste_fournis)
+
+    if fourni_select:
+        # FILTRAGE DATA
+        df_fourni_data = df_fournis_all[df_fournis_all['nom_fournisseur'] == fourni_select].copy()
+        df_mps_fourni = df_result[df_result['Fournisseur'] == fourni_select].copy()
+        
+        # ==================== KPIs HEADER ====================
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        nb_mps = len(df_mps_fourni)
+        urgents = len(df_mps_fourni[df_mps_fourni['Statut_IA'].str.contains('Urgent', na=False)])
+        pct_urgent = (urgents / nb_mps * 100) if nb_mps > 0 else 0
+        delai_moy = df_fourni_data['lead_time_j'].mean() if len(df_fourni_data) > 0 else 0
+        taux_service = df_fourni_data['taux_service_%'].mean() if len(df_fourni_data) > 0 else 0
+        fiabilite = df_fourni_data['fiabilite_%'].mean() if len(df_fourni_data) > 0 else 0
+        note_qualite = df_fourni_data['note_qualite_5'].mean() if len(df_fourni_data) > 0 else 0
+        valeur_risque = df_mps_fourni['Valeur_Risque'].sum()
+        
+        # Score Global
+        score_global = (taux_service * 0.4 + fiabilite * 0.3 + note_qualite * 20 * 0.3)
+        
+        with col1:
+            st.markdown(kpi_card_html("MPs Fournis", nb_mps, f"{urgents} urgents", "📦", ""), unsafe_allow_html=True)
+        with col2:
+            color = "kpi-card-red" if pct_urgent > 30 else "kpi-card-orange" if pct_urgent > 10 else "kpi-card-green"
+            st.markdown(kpi_card_html("% Urgents", f"{pct_urgent:.0f}%", "Stress Level", "🔴", color), unsafe_allow_html=True)
+        with col3:
+            st.markdown(kpi_card_html("Délai Moyen", f"{delai_moy:.0f}j", "Lead Time", "⏱️", ""), unsafe_allow_html=True)
+        with col4:
+            color = "kpi-card-green" if taux_service >= 95 else "kpi-card-orange" if taux_service >= 85 else "kpi-card-red"
+            st.markdown(kpi_card_html("Taux Service", f"{taux_service:.0f}%", "On-Time", "📊", color), unsafe_allow_html=True)
+        with col5:
+            color = "kpi-card-green" if score_global >= 90 else "kpi-card-orange" if score_global >= 75 else "kpi-card-red"
+            st.markdown(kpi_card_html("Score Global", f"{score_global:.0f}/100", "⭐ Note", "🏆", color), unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # ==================== GRAPHIQUES ====================
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.subheader("📊 Répartition Statuts MPs")
+            if len(df_mps_fourni) > 0:
+                statut_count = df_mps_fourni['Statut_IA'].value_counts()
+                fig_statut = px.pie(
+                    values=statut_count.values, 
+                    names=statut_count.index, 
+                    hole=0.4,
+                    color_discrete_map={'🔴 Urgent': '#FF6B6B', '🟠 À Planifier': '#FFA500', '🟡 Surveiller': '#4ECDC4', '✅ Sécurisé': '#51CF66'}
+                )
+                fig_statut.update_layout(height=300, showlegend=True)
+                st.plotly_chart(fig_statut, use_container_width=True)
+            else:
+                st.info("Ma kaynch MPs m3a had fournisseur f MRP")
+        
+        with col_g2:
+            st.subheader("💎 KPIs Qualité")
+            kpi_data = pd.DataFrame({
+                'Métrique': ['Taux Service', 'Fiabilité', 'Qualité'],
+                'Valeur': [taux_service, fiabilite, note_qualite * 20],
+                'Objectif': [95, 90, 90]
+            })
+            fig_kpi = go.Figure()
+            fig_kpi.add_trace(go.Bar(x=kpi_data['Métrique'], y=kpi_data['Valeur'], name='Réel', marker_color='#667eea'))
+            fig_kpi.add_trace(go.Scatter(x=kpi_data['Métrique'], y=kpi_data['Objectif'], name='Objectif', mode='lines+markers', line=dict(color='red', dash='dash')))
+            fig_kpi.update_layout(height=300, yaxis_title="%", yaxis_range=[0,100])
+            st.plotly_chart(fig_kpi, use_container_width=True)
+        
+        st.divider()
+        
+        # ==================== TABLEAU MPs ====================
+        st.subheader(f"📦 MPs Fournis par {fourni_select} - {len(df_mps_fourni)} articles")
+        
+        if len(df_mps_fourni) > 0:
+            st.dataframe(
+                df_mps_fourni[['Code_MP', 'Désignation', 'Stock', 'Écart', 'Couverture_J', 'Statut_IA', 'Date_Cmd_Optimale', 'Qté_Suggérée_IA', 'Valeur_Risque']],
+                use_container_width=True,
+                height=350,
+                column_config={
+                    "Couverture_J": st.column_config.NumberColumn("Couv. J", format="%.0f j"),
+                    "Écart": st.column_config.NumberColumn(format="%d kg"),
+                    "Date_Cmd_Optimale": st.column_config.DateColumn("Cmd Avant", format="DD/MM/YYYY"),
+                    "Qté_Suggérée_IA": st.column_config.NumberColumn("Qté (kg)", format="%.0f"),
+                    "Valeur_Risque": st.column_config.NumberColumn("Risque MAD", format="%.0f")
+                }
+            )
+            
+            # EXPORT EXCEL PAR FOURNISSEUR
+            excel_buf = BytesIO()
+            df_mps_fourni.to_excel(excel_buf, index=False, engine='openpyxl')
+            excel_buf.seek(0)
+            st.download_button(
+                f"📊 Export Excel {fourni_select}",
+                excel_buf,
+                f"Fourni_{fourni_select}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning(f"Ma kayn 7ta MP m3a {fourni_select} f MRP dyalk")
+        
+        st.divider()
+        
+        # ==================== ALERTES ====================
+        st.subheader("🚨 Alertes & Recommandations")
+        
+        alerts = []
+        if pct_urgent > 30:
+            alerts.append(f"🔴 **RISQUE ÉLEVÉ**: {pct_urgent:.0f}% dyal MPs urgents. Khassk tswl {fourni_select} 3lach.")
+        if taux_service < 85:
+            alerts.append(f"⚠️ **Taux Service Faible**: {taux_service:.0f}%. Chof fournisseur alternatif.")
+        if fiabilite < 80:
+            alerts.append(f"⚠️ **Fiabilité Faible**: {fiabilite:.0f}%. Problèmes qualité fréquents.")
+        if delai_moy > df_result['Délai'].mean() * 1.3:
+            alerts.append(f"⏱️ **Délai Long**: {delai_moy:.0f}j vs {df_result['Délai'].mean():.0f}j moyenne. Impact stock sécurité.")
+        if valeur_risque > 100000:
+            alerts.append(f"💰 **Valeur à Risque Élevée**: {valeur_risque:,.0f} MAD. Diversifie fournisseurs.")
+        
+        if alerts:
+            for alert in alerts:
+                st.warning(alert)
+        else:
+            st.success(f"✅ **{fourni_select} fournisseur fiable!** Kolchi KPIs f lkhdar.")
