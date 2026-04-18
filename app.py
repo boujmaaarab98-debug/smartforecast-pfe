@@ -3,9 +3,9 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="MRP Pro V4.8.1 - Live", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.8.2 - Live", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.8.1 - Live Google Sheet")
+st.title("🚀 MRP Pro Dashboard V4.8.2 - Live Google Sheet")
 st.caption("Rolling 12M + Toast Alerts + PDF Export + Gantt + Search Global")
 
 # ==================== 1. CONFIG LINKS ====================
@@ -25,21 +25,21 @@ def load_from_gsheet_public():
         df_conso_raw.columns = df_conso_raw.iloc[1] # Header f ligne 2
         df_conso = df_conso_raw[2:].reset_index(drop=True)
 
+        # Nettoyage smiyat colonnes: n7iydo espaces w accents + n7wlo kolchi l str
+        df_conso.columns = df_conso.columns.astype(str).str.strip().str.replace('\n', ' ').str.replace(' ', ' ')
+
         # Debug: nchoufou chno smiyat les colonnes
         st.sidebar.write("Colonnes Conso:", df_conso.columns.tolist())
-
-        # Nettoyage smiyat colonnes: n7iydo espaces w accents
-        df_conso.columns = df_conso.columns.str.strip().str.replace('\n', ' ')
 
         # Mapping flexible - y9lb 3la smiya b7alha
         col_map_conso = {}
         for col in df_conso.columns:
-            col_lower = col.lower()
-            if 'ref' in col_lower and 'produit' in col_lower:
+            col_lower = str(col).lower() # FIX: str(col) bach ma y-errorish ila kan float
+            if 'ref' in col_lower and 'produit' in col_lower and 'finis' in col_lower:
                 col_map_conso[col] = 'Ref_PF'
             elif 'code' in col_lower and 'matière' in col_lower:
                 col_map_conso[col] = 'Code_MP'
-            elif 'conso' in col_lower and 'journaliere' in col_lower:
+            elif 'conso' in col_lower and 'journaliere' in col_lower and 'kg' in col_lower:
                 col_map_conso[col] = 'Conso_U_Unitaire'
             elif 'couverture' in col_lower and 'octabin' in col_lower:
                 col_map_conso[col] = 'Couverture_Octab'
@@ -52,6 +52,7 @@ def load_from_gsheet_public():
         if missing:
             st.error(f"Colonnes manquantes f Conso: {missing}")
             st.info(f"Colonnes li l9it: {df_conso.columns.tolist()}")
+            st.info("Vérifi smiyat les colonnes f ligne 2 dyal sheet Conso")
             return None, None
 
         for col in ['Conso_U_Unitaire', 'Couverture_Octab']:
@@ -120,7 +121,7 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 4. INTERFACE V4.8.1 ====================
+# ==================== 4. INTERFACE V4.8.2 ====================
 tab1, tab2, tab3 = st.tabs(["📊 Vue Globale", "⚠️ Alertes & Projection", "🏢 Fourni 360"])
 
 with tab1:
