@@ -42,3 +42,10 @@ def calculate_plan(param, conso):
     )
 
     return df
+
+data = load_all_data()
+
+df = calculate_plan(data["param"], data["conso"])
+
+st.subheader("Plan Approvisionnement")
+st.write(df)
