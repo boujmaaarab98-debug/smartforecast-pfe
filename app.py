@@ -3,7 +3,7 @@ import pandas as pd
 from data.google_sheets import load_all_data
 
 # -----------------------------
-# Nettoyage colonnes numériques
+# Nettoyage numérique
 # -----------------------------
 def clean_numeric(series):
     return pd.to_numeric(
@@ -15,91 +15,140 @@ def clean_numeric(series):
     )
 
 # -----------------------------
-# Fonction calcul Plan Appro
+# Préparation MRP (wide → long)
 # -----------------------------
-def calculate_plan(param, conso):
-    param = param.copy()
-    conso = conso.copy()
+def prepare_mrp(mrp):
+    df = mrp.copy()
 
-    # Nettoyage colonnes param
+    product_col = "Ref produit finis"
+    date_cols = [c for c in df.columns if c != product_col]
+
+    df_long = df.melt(
+        id_vars=[product_col],
+        value_vars=date_cols,
+        var_name="date",
+        value_name="qte_pf"
+    )
+
+    df_long = df_long.rename(columns={
+        "Ref produit finis": "ref_produit_finis"
+    })
+
+    df_long["date"] = pd.to_datetime(df_long["date"], dayfirst=True, errors="coerce")
+    df_long["qte_pf"] = clean_numeric(df_long["qte_pf"]).fillna(0)
+
+    df_long = df_long.dropna(subset=["date"])
+    df_long = df_long[df_long["qte_pf"] > 0]
+
+    return df_long
+
+# -----------------------------
+# Calcul MRP → MP
+# -----------------------------
+def calculate_plan(param, conso, mrp_period):
+
+    # nettoyage param
     param["lead_time_j"] = clean_numeric(param["lead_time_j"])
     param["moq_kg"] = clean_numeric(param["moq_kg"])
     param["stock_actuel"] = clean_numeric(param["stock_actuel"])
 
-    # Renommer colonnes conso
+    # rename conso
     conso = conso.rename(columns={
         "CODE matière": "code_mp",
-        "conso journaliere MP en KG": "conso_jour_kg"
+        "Ref produit finis": "ref_produit_finis",
+        "conso_unitaire": "conso_unit"
     })
 
-    # Nettoyage conso
-    conso["conso_jour_kg"] = clean_numeric(conso["conso_jour_kg"])
+    conso["conso_unit"] = clean_numeric(conso["conso_unit"])
 
-    # Agrégation conso par matière
-    conso_grouped = (
-        conso.groupby("code_mp", as_index=False)["conso_jour_kg"]
-        .sum()
-    )
+    # merge MRP + Conso
+    df_need = mrp_period.merge(conso, on="ref_produit_finis", how="left")
 
-    # Merge
-    df = param.merge(conso_grouped, on="code_mp", how="left")
+    # besoin MP
+    df_need["besoin_mp_kg"] = df_need["qte_pf"] * df_need["conso_unit"]
 
-    # Valeurs nulles
-    df["conso_jour_kg"] = df["conso_jour_kg"].fillna(0)
+    # agrégation par MP
+    besoin_mp = df_need.groupby("code_mp", as_index=False)["besoin_mp_kg"].sum()
 
-    # Couverture en jours
-    df["couverture_j"] = df.apply(
-        lambda row: row["stock_actuel"] / row["conso_jour_kg"]
-        if row["conso_jour_kg"] > 0 else 999,
-        axis=1
-    )
+    # merge avec param
+    df = param.merge(besoin_mp, on="code_mp", how="left")
+    df["besoin_mp_kg"] = df["besoin_mp_kg"].fillna(0)
 
-    # Besoin pendant lead time
-    df["besoin_lt"] = df["conso_jour_kg"] * df["lead_time_j"]
+    # calcul commande
+    df["manque"] = df["besoin_mp_kg"] - df["stock_actuel"]
 
-    # Décision achat
-    df["a_commander"] = df["stock_actuel"] < df["besoin_lt"]
+    df["qte_commande"] = df["manque"].apply(lambda x: max(x, 0))
 
-    # Quantité à commander
+    # respect MOQ
     df["qte_commande"] = df.apply(
-        lambda row: max(row["moq_kg"], row["besoin_lt"] - row["stock_actuel"])
-        if row["a_commander"] else 0,
+        lambda row: row["moq_kg"] if 0 < row["qte_commande"] < row["moq_kg"] else row["qte_commande"],
         axis=1
     )
 
-    # Statut
-    df["statut"] = df["a_commander"].apply(
-        lambda x: "CRITIQUE" if x else "OK"
+    # statut
+    df["statut"] = df["qte_commande"].apply(
+        lambda x: "🔴 CRITIQUE" if x > 0 else "🟢 OK"
     )
+
+    # priorité (tri)
+    df = df.sort_values(by="qte_commande", ascending=False)
 
     return df
 
 # -----------------------------
-# App Streamlit
+# APP
 # -----------------------------
-st.set_page_config(page_title="Smart Forecast", layout="wide")
+st.set_page_config(layout="wide")
+st.title("📊 MRP - Plan Approvisionnement Intelligent")
 
-st.title("📊 Smart Forecast - Plan Approvisionnement")
-
-# Chargement data
 data = load_all_data()
 
-# Debug optionnel
-with st.expander("Voir colonnes"):
-    st.write("Param:", list(data["param"].columns))
-    st.write("Conso:", list(data["conso"].columns))
+param = data["param"]
+conso = data["conso"]
+mrp = data["mrp"]
 
-# Calcul
-df = calculate_plan(data["param"], data["conso"])
+mrp_long = prepare_mrp(mrp)
 
+# 🎯 اختيار المدة
+st.sidebar.header("Période")
+
+duree = st.sidebar.selectbox(
+    "Choisir la durée",
+    ["14 jours", "30 jours", "60 jours", "90 jours"]
+)
+
+nb_days = {
+    "14 jours": 14,
+    "30 jours": 30,
+    "60 jours": 60,
+    "90 jours": 90
+}[duree]
+
+date_start = mrp_long["date"].min()
+date_end = date_start + pd.Timedelta(days=nb_days)
+
+mrp_period = mrp_long[
+    (mrp_long["date"] >= date_start) &
+    (mrp_long["date"] <= date_end)
+]
+
+# 🔥 calcul final
+plan = calculate_plan(param, conso, mrp_period)
+
+# -----------------------------
 # KPIs
-st.subheader("📌 KPIs")
-col1, col2, col3 = st.columns(3)
+# -----------------------------
+st.subheader("📊 KPIs")
 
-col1.metric("Total matières", len(df))
-col2.metric("À commander", int(df["a_commander"].sum()))
-col3.metric("Critiques", int((df["statut"] == "CRITIQUE").sum()))
+c1, c2, c3 = st.columns(3)
 
-# Tableau final
+c1.metric("Total MP", len(plan))
+c2.metric("À commander", int((plan["qte_commande"] > 0).sum()))
+c3.metric("Qté totale (kg)", round(plan["qte_commande"].sum(), 2))
+
+# -----------------------------
+# TABLE
+# -----------------------------
 st.subheader("📦 Plan Approvisionnement")
-st.dataframe(df, use_container_width=True)
+
+st.dataframe(plan, use_container_width=True)
