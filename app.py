@@ -7,10 +7,10 @@ import numpy as np
 from io import BytesIO
 import zipfile
 
-st.set_page_config(page_title="MRP Pro V4.13.3 - Stock Fix", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.13.4 - Fix Fasila", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.13.3 - Stock Mn Param")
-st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Stock = stock_actuel mn Param")
+st.title("🚀 MRP Pro Dashboard V4.13.4 - Fix Fasila Milliers")
+st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Stock + Conso S7i7")
 
 # ==================== 1. SEUILS PROFESSIONNELS ====================
 SEUIL_ROUGE = 4
@@ -31,16 +31,23 @@ URL_CONSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuO
 URL_FOURNIS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAmHiaSuux6KR72VvUGqN6W6cATE7jJmCdU__MuQHH-ejq1zLygGk5ZCYrrKn/pub?gid=1581263595&single=true&output=csv"
 URL_MRP = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAmHiaSuux6KR72VvUGqN6W6cATE7jJmCdU__MuQHH-ejq1zLygGk5ZCYrrKn/pub?gid=418845709&single=true&output=csv"
 
-# ==================== 3. FONCTIONS UTILES ====================
+# ==================== 3. FONCTIONS UTILES - FIX FASILA ====================
 def clean_numeric(series):
+    """
+    FIX: N7iydo fasila dyal milliers + espaces
+    1,234 → 1234 machi 1.234
+    1 234 → 1234
+    1.5 → 1.5
+    """
     return pd.to_numeric(
         series.astype(str)
-   .str.replace(' ', '')
-   .str.replace(',', '.')
-   .str.replace('€', '')
-   .str.replace('KG', '')
-   .str.replace('kg', '')
-   .str.strip(),
+     .str.replace(' ', '') # N7iydo espaces: "1 234" → "1234"
+     .str.replace(',', '') # FIX: N7iydo fasila dyal milliers: "1,234" → "1234"
+     .str.replace('€', '')
+     .str.replace('KG', '')
+     .str.replace('kg', '')
+     .str.replace('%', '') # Zid hadi l pourcentage
+     .str.strip(),
         errors='coerce'
     )
 
@@ -53,11 +60,10 @@ def to_zip_csv(df_dict):
     zip_buffer.seek(0)
     return zip_buffer
 
-# ==================== 4. FONCTION DE CHARGEMENT - FIX STOCK ====================
+# ==================== 4. FONCTION DE CHARGEMENT ====================
 @st.cache_data(ttl=600)
 def load_full_data():
     try:
-        # --- Param - HNA FIN KAYN STOCK S7I7 ---
         df_param = pd.read_csv(URL_PARAM)
         df_param = df_param.rename(columns={
             'code_mp': 'Code_MP',
@@ -65,13 +71,12 @@ def load_full_data():
             'lead_time_j': 'Délai_Param',
             'moq_kg': 'MOQ_Param',
             'stock_secu_actuel': 'Stock_Sécu_Sheet',
-            'stock_actuel': 'Stock' # FIX: Hadak howa stock réel
+            'stock_actuel': 'Stock'
         })
         for col in ['Délai_Param', 'MOQ_Param', 'Stock_Sécu_Sheet', 'Stock']:
             if col in df_param.columns:
                 df_param[col] = clean_numeric(df_param[col])
 
-        # --- Conso - Ghir l conso dyal PF ---
         df_conso = pd.read_csv(URL_CONSO)
         df_conso = df_conso.rename(columns={
             'Ref produit finis': 'Ref_PF',
@@ -82,10 +87,8 @@ def load_full_data():
         })
         df_conso['Conso_U_Unitaire'] = clean_numeric(df_conso['Conso_U_Unitaire'])
         df_conso['Couverture_Octab'] = clean_numeric(df_conso['Couverture_Octab'])
-        # MA B9INACH KAN7SBO Stock_Actuel_MP MN HNA
         df_conso = df_conso.dropna(subset=['Code_MP', 'Ref_PF'])
 
-        # --- Fournisseurs ---
         df_fournis = pd.read_csv(URL_FOURNIS)
         df_fournis = df_fournis.rename(columns={
             'code_mp': 'Code_MP',
@@ -98,7 +101,6 @@ def load_full_data():
             if col in df_fournis.columns:
                 df_fournis[col] = clean_numeric(df_fournis[col])
 
-        # --- MRP Prévisionnel ---
         df_prev_pf = pd.read_csv(URL_MRP)
         df_prev_pf = df_prev_pf.rename(columns={'Ref produit finis': 'Ref_PF'})
 
@@ -112,8 +114,7 @@ def load_full_data():
         df_besoin_mp['Besoin_MP_KG'] = df_besoin_mp['Qte_PF_Prévue'] * df_besoin_mp['Conso_U_Unitaire']
         df_besoin_jour = df_besoin_mp.groupby(['Code_MP', 'Date'])['Besoin_MP_KG'].sum().reset_index()
 
-        # --- Construction DF_MRP Final - STOCK MN PARAM ---
-        df_mrp = df_param.copy() # Stock deja fih
+        df_mrp = df_param.copy()
         df_mrp = pd.merge(df_mrp, df_fournis, on='Code_MP', how='left')
 
         date_fin_30j = datetime.now() + timedelta(days=30)
@@ -154,11 +155,11 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 6. INTERFACE V4.13.3 ====================
+# ==================== 6. INTERFACE V4.13.4 ====================
 tab1, tab2, tab3, tab4 = st.tabs(["📊 MRP Complet", "📈 KPIs Conso & Prévision PRO", "⚠️ Alertes", "🏢 Fournisseurs"])
 
 with tab1:
-    st.header("MRP Complet - Stock Mn Param Sheet")
+    st.header("MRP Complet - Stock + Conso S7i7a")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🔴 Rouge <4j", df_mrp[df_mrp['Statut'] == 'Rouge'].shape[0])
     col2.metric("🟠 Orange <6j", df_mrp[df_mrp['Statut'] == 'Orange'].shape[0])
@@ -181,7 +182,7 @@ with tab1:
     }), use_container_width=True, height=600)
 
 with tab2:
-    st.header("📈 KPIs Consommation & Prévision - Niveau Professionnel")
+    st.header("📈 KPIs Consommation & Prévision - FIX Fasila")
 
     conso_moy = df_conso.groupby('Code_MP')['Conso_U_Unitaire'].agg(['mean', 'std', 'count']).reset_index()
     conso_moy.columns = ['Code_MP', 'Conso_Moy_KG', 'Volatilité_StdDev', 'Nb_PF_Utilisateurs']
@@ -247,11 +248,11 @@ with tab2:
     else:
         st.info("Ma kaynach data kafya bach ndir forecast. Khassk au moins 3 mois d'historique.")
 
-    st.subheader("6️⃣ Date Prévue dyal Rupture Stock - FIX")
+    st.subheader("6️⃣ Date Prévue dyal Rupture Stock - S7I7 DABA")
     df_rupture = df_mrp[df_mrp['Consommation_J'] > 0].copy()
     df_rupture['Jours_Ba9i'] = (df_rupture['Stock'] / df_rupture['Consommation_J']).round(0)
     df_rupture['Date_Rupture_Prévue'] = pd.to_datetime(datetime.now()) + pd.to_timedelta(df_rupture['Jours_Ba9i'], unit='D')
-    df_rupture = df_rupture.sort_values('Jours_Ba9i') # Ma b9inach nlimitaw l 60 jours
+    df_rupture = df_rupture.sort_values('Jours_Ba9i')
     st.dataframe(df_rupture[['Code_MP', 'Désignation', 'Stock', 'Consommation_J', 'Jours_Ba9i', 'Date_Rupture_Prévue', 'Statut']], use_container_width=True, height=250)
 
     st.subheader("7️⃣ Suggestion MOQ Optimal")
