@@ -1,6 +1,6 @@
 import pandas as pd
 
-SHEET_ID = "حط هنا ID ديال Google Sheet ديالك"
+SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
 
 def build_url(sheet_name):
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
