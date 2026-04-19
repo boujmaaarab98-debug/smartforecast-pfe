@@ -13,43 +13,83 @@ st.set_page_config(page_title="MRP Pro Dashboard", layout="wide")
 st.markdown("""
 <style>
     .main {
-        background-color: #f7f9fc;
+        background-color: #f6f8fb;
     }
+
+    .section-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 6px;
+    }
+
+    .section-subtitle {
+        font-size: 14px;
+        color: #6b7280;
+        margin-bottom: 18px;
+    }
+
     .kpi-card {
         background: white;
+        border-radius: 18px;
         padding: 18px 20px;
-        border-radius: 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
         border-left: 6px solid #4f46e5;
-        margin-bottom: 10px;
+        min-height: 130px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        margin-bottom: 14px;
     }
+
     .kpi-title {
-        font-size: 15px;
-        color: #6b7280;
-        margin-bottom: 8px;
-    }
-    .kpi-value {
-        font-size: 32px;
-        font-weight: 700;
-        color: #111827;
-    }
-    .section-title {
-        font-size: 28px;
-        font-weight: 700;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        color: #111827;
-    }
-    .subtle {
-        color: #6b7280;
         font-size: 14px;
+        color: #6b7280;
+        line-height: 1.4;
+        word-break: break-word;
     }
-    .block-card {
+
+    .kpi-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.2;
+        margin-top: 10px;
+        word-break: break-word;
+    }
+
+    .panel-card {
         background: white;
-        padding: 18px;
-        border-radius: 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        min-height: 180px;
         margin-bottom: 18px;
+    }
+
+    .panel-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 14px;
+    }
+
+    div[data-testid="stMetric"] {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border: 1px solid #eef2f7;
+    }
+
+    div[data-testid="stTabs"] {
+        margin-top: 8px;
+    }
+
+    div[data-testid="stDataFrame"] {
+        background: white;
+        border-radius: 14px;
+        padding: 6px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -106,6 +146,7 @@ def prepare_param(param):
 
 def prepare_conso(conso):
     df = conso.copy()
+
     df = df.rename(columns={
         "Ref produit finis": "ref_produit_finis",
         "CODE matière": "code_mp",
@@ -127,6 +168,7 @@ def prepare_conso(conso):
 def prepare_mrp(mrp):
     df = mrp.copy()
     product_col = "Ref produit finis"
+
     if product_col not in df.columns:
         raise ValueError("La colonne 'Ref produit finis' est introuvable dans MRP.")
 
@@ -146,6 +188,7 @@ def prepare_mrp(mrp):
 
     df_long = df_long.dropna(subset=["date"])
     df_long = df_long[df_long["qte_pf"] > 0]
+
     return df_long
 
 def prepare_fournisseurs(fournisseurs):
@@ -225,6 +268,7 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     df["besoin_periode_kg"] = df["besoin_periode_kg"].fillna(0)
     df["liste_pf"] = df["liste_pf"].fillna("")
+    df["nom_fournisseur"] = df["nom_fournisseur"].fillna("-")
 
     nb_days = max((pd.to_datetime(end_date) - pd.to_datetime(start_date)).days + 1, 1)
 
@@ -289,8 +333,8 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 # =========================================================
 # MAIN
 # =========================================================
-st.markdown('<div class="section-title">📦 MRP Pro Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtle">Vision claire par KPI, fournisseur, matière première et stock.</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">📊 Dashboard Global</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-subtitle">Vue synthétique des approvisionnements, fournisseurs et stock.</div>', unsafe_allow_html=True)
 
 if st.sidebar.button("🔄 Actualiser maintenant"):
     st.cache_data.clear()
@@ -337,54 +381,66 @@ mrp_period = mrp_long[
 plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
 # =========================================================
-# KPI GLOBAL
+# GLOBAL KPIS
 # =========================================================
-st.markdown("### 📊 Dashboard Global")
-
 g1, g2, g3, g4, g5 = st.columns(5)
+
 with g1:
     kpi_card("Total MP", int(len(plan)))
 with g2:
     kpi_card("MP à commander", int(plan["a_commander"].sum()))
 with g3:
-    kpi_card("Urgents/Critiques", int(plan["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"]).sum()))
+    kpi_card("Urgents / Critiques", int(plan["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"]).sum()))
 with g4:
-    kpi_card("Qté commande (kg)", round(plan["qte_commande"].sum(), 2))
+    kpi_card("Qté commande (kg)", f"{round(plan['qte_commande'].sum(), 2):,.2f}")
 with g5:
-    kpi_card("Valeur commande (€)", round(plan["valeur_commande_eur"].sum(), 2))
+    kpi_card("Valeur commande (€)", f"{round(plan['valeur_commande_eur'].sum(), 2):,.2f}")
+
+extra1, extra2, extra3 = st.columns(3)
+
+taux_criticite = round((plan["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"]).sum() / len(plan)) * 100, 1) if len(plan) else 0
+stock_suffisant = int((plan["statut"] == "🟢 OK").sum())
+mp_sans_besoin = int((plan["besoin_periode_kg"] == 0).sum())
+
+with extra1:
+    st.metric("Taux criticité (%)", taux_criticite)
+with extra2:
+    st.metric("MP stock suffisant", stock_suffisant)
+with extra3:
+    st.metric("MP sans besoin", mp_sans_besoin)
 
 # =========================================================
-# KPI FOURNISSEURS + STOCK
+# SUPPLIER + STOCK PANELS
 # =========================================================
-row_a, row_b = st.columns([1, 1])
+row_a, row_b = st.columns(2)
 
 with row_a:
-    st.markdown('<div class="block-card">', unsafe_allow_html=True)
-    st.markdown("#### 🏭 KPIs Fournisseurs")
+    st.markdown('<div class="panel-card">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">🏭 KPIs Fournisseurs</div>', unsafe_allow_html=True)
 
-    nb_fournisseurs = plan["nom_fournisseur"].fillna("").replace("", pd.NA).dropna().nunique()
-    fournisseurs_critiques = plan[plan["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"])]["nom_fournisseur"].fillna("").replace("", pd.NA).dropna().nunique()
+    nb_fournisseurs = plan["nom_fournisseur"].replace("-", pd.NA).dropna().nunique()
+    fournisseurs_critiques = plan[plan["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"])]["nom_fournisseur"].replace("-", pd.NA).dropna().nunique()
     top_supplier = (
         plan.groupby("nom_fournisseur", dropna=False)["qte_commande"]
         .sum()
         .sort_values(ascending=False)
         .reset_index()
     )
-    top_supplier_name = top_supplier.iloc[0]["nom_fournisseur"] if len(top_supplier) > 0 and pd.notna(top_supplier.iloc[0]["nom_fournisseur"]) and top_supplier.iloc[0]["nom_fournisseur"] != "" else "-"
+    top_supplier_name = top_supplier.iloc[0]["nom_fournisseur"] if len(top_supplier) > 0 else "-"
 
     f1, f2, f3 = st.columns(3)
     with f1:
         st.metric("Nb fournisseurs", nb_fournisseurs)
     with f2:
-        st.metric("Fournisseurs critiques", fournisseurs_critiques)
+        st.metric("Critiques", fournisseurs_critiques)
     with f3:
         st.metric("Top fournisseur", top_supplier_name)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 with row_b:
-    st.markdown('<div class="block-card">', unsafe_allow_html=True)
-    st.markdown("#### 📦 KPIs Stock")
+    st.markdown('<div class="panel-card">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">📦 KPIs Stock</div>', unsafe_allow_html=True)
 
     couverture_moy = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1) if len(plan) > 0 else 0
     stock_total = round(plan["stock_actuel"].sum(), 2)
@@ -401,6 +457,30 @@ with row_b:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
+# QUICK TABLES
+# =========================================================
+qa, qb = st.columns(2)
+
+with qa:
+    st.markdown("### Top 5 fournisseurs par quantité commandée")
+    top_fourn = (
+        plan.groupby("nom_fournisseur", as_index=False)["qte_commande"]
+        .sum()
+        .sort_values("qte_commande", ascending=False)
+        .head(5)
+    )
+    st.dataframe(top_fourn, use_container_width=True, hide_index=True)
+
+with qb:
+    st.markdown("### Top 5 MP critiques")
+    top_mp = plan.sort_values(["status_order", "qte_commande"], ascending=[True, False]).head(5)
+    st.dataframe(
+        top_mp[["code_mp", "designation", "nom_fournisseur", "qte_commande", "date_commande", "statut"]],
+        use_container_width=True,
+        hide_index=True
+    )
+
+# =========================================================
 # TABS
 # =========================================================
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -415,8 +495,8 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # =========================================================
 with tab1:
     st.markdown("### 📋 Plan Approvisionnement")
-    t1, t2 = st.columns([1, 1])
 
+    t1, t2 = st.columns(2)
     with t1:
         selected_status = st.selectbox("Filtrer par statut", ["Tout", "🔴 URGENT", "🔴 CRITIQUE", "🟠 ATTENTION", "🟢 OK"])
     with t2:
@@ -457,29 +537,33 @@ with tab1:
 with tab2:
     st.markdown("### 🏭 Vue Fournisseurs")
 
-    fournisseurs_list = sorted([x for x in plan["nom_fournisseur"].dropna().unique() if str(x).strip() != ""])
-    selected_fournisseur = st.selectbox("Choisir un fournisseur", fournisseurs_list)
+    fournisseurs_list = sorted([x for x in plan["nom_fournisseur"].dropna().unique() if str(x).strip() not in ["", "-"]])
 
-    df_f = plan[plan["nom_fournisseur"] == selected_fournisseur].copy()
+    if fournisseurs_list:
+        selected_fournisseur = st.selectbox("Choisir un fournisseur", fournisseurs_list)
+        df_f = plan[plan["nom_fournisseur"] == selected_fournisseur].copy()
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.metric("Nb MP", int(df_f["code_mp"].nunique()))
-    with k2:
-        st.metric("Qté commande (kg)", round(df_f["qte_commande"].sum(), 2))
-    with k3:
-        st.metric("MP critiques", int(df_f["statut"].isin(["🔴 URGENT", "🔴 CRITIQUE"]).sum()))
-    with k4:
-        st.metric("Stock moyen (kg)", round(df_f["stock_actuel"].mean(), 2) if len(df_f) else 0)
+        st.markdown("#### Résumé fournisseur")
+        r1, r2, r3, r4 = st.columns(4)
+        with r1:
+            st.metric("Nb MP", int(df_f["code_mp"].nunique()))
+        with r2:
+            st.metric("Qté commande (kg)", round(df_f["qte_commande"].sum(), 2))
+        with r3:
+            st.metric("Besoin total (kg)", round(df_f["besoin_total_kg"].sum(), 2))
+        with r4:
+            st.metric("Couverture moy (j)", round(df_f["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1) if len(df_f) else 0)
 
-    st.markdown("#### MP liés à ce fournisseur")
-    st.dataframe(
-        df_f[[
-            "code_mp", "designation", "stock_actuel", "besoin_periode_kg",
-            "qte_commande", "couverture_j", "date_commande", "statut"
-        ]],
-        use_container_width=True
-    )
+        st.markdown("#### MP liés à ce fournisseur")
+        st.dataframe(
+            df_f[[
+                "code_mp", "designation", "stock_actuel", "besoin_periode_kg",
+                "qte_commande", "couverture_j", "date_commande", "statut"
+            ]],
+            use_container_width=True
+        )
+    else:
+        st.info("Aucun fournisseur disponible.")
 
 # =========================================================
 # TAB 3 - MP
@@ -488,52 +572,53 @@ with tab3:
     st.markdown("### 🧱 Vue Matières Premières")
 
     mp_list = sorted(plan["code_mp"].dropna().unique())
-    selected_mp = st.selectbox("Choisir une MP", mp_list)
 
-    df_mp = plan[plan["code_mp"] == selected_mp].copy()
+    if len(mp_list) > 0:
+        selected_mp = st.selectbox("Choisir une MP", mp_list)
+        df_mp = plan[plan["code_mp"] == selected_mp].copy()
 
-    if len(df_mp) > 0:
-        row = df_mp.iloc[0]
+        if len(df_mp) > 0:
+            row = df_mp.iloc[0]
 
-        a1, a2, a3, a4 = st.columns(4)
-        with a1:
-            st.metric("Stock actuel", round(row["stock_actuel"], 2))
-        with a2:
-            st.metric("Besoin période", round(row["besoin_periode_kg"], 2))
-        with a3:
-            st.metric("Qté commande", round(row["qte_commande"], 2))
-        with a4:
-            st.metric("Couverture (jours)", round(row["couverture_j"], 2) if row["couverture_j"] != 999999 else 0)
+            a1, a2, a3, a4 = st.columns(4)
+            with a1:
+                st.metric("Stock actuel", round(row["stock_actuel"], 2))
+            with a2:
+                st.metric("Besoin période", round(row["besoin_periode_kg"], 2))
+            with a3:
+                st.metric("Qté commande", round(row["qte_commande"], 2))
+            with a4:
+                st.metric("Couverture (jours)", round(row["couverture_j"], 2) if row["couverture_j"] != 999999 else 0)
 
-        st.markdown("#### Détails MP")
-        details_df = pd.DataFrame({
-            "Champ": [
-                "Code MP", "Désignation", "Fournisseur", "Lead Time", "MOQ",
-                "Date besoin", "Date commande", "Statut"
-            ],
-            "Valeur": [
-                row["code_mp"],
-                row["designation"],
-                row["nom_fournisseur"],
-                row["lead_time_j"],
-                row["moq_kg"],
-                row["date_besoin"],
-                row["date_commande"],
-                row["statut"]
-            ]
-        })
-        st.dataframe(details_df, use_container_width=True, hide_index=True)
+            st.markdown("#### Détails MP")
+            details_df = pd.DataFrame({
+                "Champ": [
+                    "Code MP", "Désignation", "Fournisseur", "Lead Time", "MOQ",
+                    "Date besoin", "Date commande", "Statut"
+                ],
+                "Valeur": [
+                    row["code_mp"],
+                    row["designation"],
+                    row["nom_fournisseur"],
+                    row["lead_time_j"],
+                    row["moq_kg"],
+                    row["date_besoin"],
+                    row["date_commande"],
+                    row["statut"]
+                ]
+            })
+            st.dataframe(details_df, use_container_width=True, hide_index=True)
 
-        st.markdown("#### PF liés à cette MP")
-        pf_list = [x.strip() for x in str(row["liste_pf"]).split(",") if x.strip()]
-        pf_df = pd.DataFrame({"Produit fini lié": pf_list})
-        st.dataframe(pf_df, use_container_width=True, hide_index=True)
+            st.markdown("#### Produits finis liés")
+            pf_list = [x.strip() for x in str(row["liste_pf"]).split(",") if x.strip()]
+            for pf in pf_list:
+                st.markdown(f"- {pf}")
 
 # =========================================================
 # TAB 4 - ANALYSE DETAILLEE
 # =========================================================
 with tab4:
-    left, right = st.columns([1, 1])
+    left, right = st.columns(2)
 
     with left:
         st.markdown("### 🔴 Top MP critiques")
