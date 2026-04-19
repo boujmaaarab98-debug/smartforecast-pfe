@@ -17,7 +17,7 @@ from reportlab.lib.units import inch
 # ========================================
 # CONFIG + CSS PRO
 # ========================================
-SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM" # FIX: Mdefyi hna
+SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM" # FIX NameError
 st.set_page_config(page_title="MRP Pro Dashboard V5.2", layout="wide", page_icon="🚀")
 
 st.markdown("""
@@ -74,25 +74,39 @@ def clean_numeric_smart(series):
 def charger_donnees_google():
     base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
     try:
+        # PARAM
         param = pd.read_csv(base_url + "Param")
+        param.columns = param.columns.str.strip()
+        param = param.rename(columns={'code_mp': 'Code_MP', 'designation': 'Désignation', 'lead_time_j': 'Lead_Time', 'moq_kg': 'MOQ', 'stock_actuel': 'Stock'})
+        for col in ['Lead_Time', 'MOQ', 'Stock']:
+            if col in param.columns: param[col] = clean_numeric_smart(param[col])
+
+        # CONSOM - FIX: Poids_Piece
         conso = pd.read_csv(base_url + "Conso")
+        conso.columns = conso.columns.str.strip()
+        conso = conso.rename(columns={'Ref produit finis': 'Ref_PF', 'CODE matière': 'Code_MP', 'Poids pièce': 'Poids_Piece', 'Projet': 'Projet'})
+        conso['Poids_Piece'] = clean_numeric_smart(conso['Poids_Piece'])
+        conso = conso.dropna(subset=['Code_MP', 'Ref_PF', 'Poids_Piece'])
+
+        # MRP
         mrp = pd.read_csv(base_url + "MRP")
+        mrp.columns = mrp.columns.str.strip()
+        mrp = mrp.rename(columns={'Ref produit finis': 'Ref_PF'})
+
+        # FOURNISSEURS
         fournis = pd.read_csv(base_url + "Fournisseurs")
-        for df in [param, conso, mrp, fournis]:
-            df.columns = df.columns.str.strip()
-            for col in df.columns:
-                if any(x in col.lower() for x in ['qte', 'stock', 'cout', 'moq', 'lead', 'taux', 'fiabilite', 'note', 'poids']):
-                    df[col] = clean_numeric_smart(df[col])
-        conso['date'] = pd.to_datetime(conso[trouver_colonne(conso, ['date'])], errors='coerce')
-        mrp['date_besoin'] = pd.to_datetime(mrp[trouver_colonne(mrp, ['date_besoin'])], errors='coerce')
+        fournis.columns = fournis.columns.str.strip()
+        fournis = fournis.rename(columns={'code_mp': 'Code_MP', 'nom_fournisseur': 'Fournisseur', 'prix_unitaire_eur': 'Prix_EUR', 'lead_time_j': 'Delai_Fournis', 'moq_kg': 'MOQ_Fournis', 'fiabilite_%': 'Fiabilite', 'taux_service_%': 'Taux_Service', 'note_qualite_5': 'Note_Qualite'})
+        for col in ['Prix_EUR', 'Delai_Fournis', 'MOQ_Fournis', 'Fiabilite', 'Taux_Service', 'Note_Qualite']:
+            if col in fournis.columns: fournis[col] = clean_numeric_smart(fournis[col])
+
         return param, conso, mrp, fournis
     except Exception as e:
         st.error(f"❌ Erreur: {e}")
         return None, None, None, None
 
 def calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unitaire):
-    if cout_stockage_unit <= 0 or demande_annuelle <= 0:
-        return 0
+    if cout_stockage_unit <= 0 or demande_annuelle <= 0: return 0
     return np.sqrt((2 * demande_annuelle * cout_commande) / cout_stockage_unit)
 
 def classification_abc(df):
@@ -117,8 +131,8 @@ def generer_pdf_plan_appro(df_ia):
     table = Table(data, colWidths=[1*inch, 1.5*inch, 1*inch, 1*inch, 1*inch, 1.2*inch])
     table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTSIZE', (0, 0), (-1, 0), 10), ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige), ('GRID', (0, 0), (-1, -1), 1, colors.black)]))
     elements.append(table)
-    total_val = (df_ia['Qté_Suggérée_IA'] * df_ia['Cout_Unit']).sum()
-    elements.append(Paragraph(f"<br/><b>Valeur Totale: {total_val:,.0f} MAD</b>", styles['Normal']))
+    total_val = (df_ia['Qté_Suggérée_IA'] * df_ia['Prix_EUR']).sum()
+    elements.append(Paragraph(f"<br/><b>Valeur Totale: {total_val:,.0f} EUR</b>", styles['Normal']))
     doc.build(elements)
     buffer.seek(0)
     return buffer
@@ -127,338 +141,182 @@ def kpi_card_html(label, value, trend, icon, color_class=""):
     return f"""<div class="kpi-card {color_class}"><div class="kpi-label">{icon} {label}</div><div class="kpi-value">{value}</div><div class="kpi-trend">{trend}</div></div>"""
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
-    # Colonnes
-    col_mp_param = trouver_colonne(param, ['code_mp'])
-    col_mp_conso = trouver_colonne(conso, ['code_mp', 'CODE matière'])
-    col_pf_conso = trouver_colonne(conso, ['Ref produit finis'])
-    col_poids_piece = trouver_colonne(conso, ['Poids pièce']) # FIX: Nakhdo Poids Pièce
-    col_mp_mrp = trouver_colonne(mrp, ['code_mp'])
-    col_qte_mrp = trouver_colonne(mrp, ['qte_besoin_kg', 'qte_besoin'])
-    col_mp_fournis = trouver_colonne(fournis, ['code_mp'])
+    # 1. Explosion MRP: PF × Dates → MP - FIX: Poids_Piece
+    df_mrp_melt = mrp.melt(id_vars=['Ref_PF'], var_name='Date', value_name='Qte_PF_Prévue')
+    df_mrp_melt['Qte_PF_Prévue'] = clean_numeric_smart(df_mrp_melt['Qte_PF_Prévue'])
+    df_mrp_melt = df_mrp_melt.dropna(subset=['Qte_PF_Prévue'])
+    df_mrp_melt['Date'] = pd.to_datetime(df_mrp_melt['Date'], dayfirst=True, errors='coerce')
+    df_mrp_melt = df_mrp_melt.dropna(subset=['Date'])
 
-    resultats = []
-    forecasts_dict = {}
-    date_actuelle = datetime.now().date()
-    date_12_mois = date_actuelle - relativedelta(months=12)
+    # FIX: Jointure × Poids_Piece machi Conso_U_Unitaire
+    df_besoin = pd.merge(df_mrp_melt, conso[['Ref_PF', 'Code_MP', 'Poids_Piece']], on='Ref_PF', how='inner')
+    df_besoin['Besoin_MP_KG'] = df_besoin['Qte_PF_Prévue'] * df_besoin['Poids_Piece']
+    df_besoin_jour = df_besoin.groupby(['Code_MP', 'Date'])['Besoin_MP_KG'].sum().reset_index()
 
-    for _, mp_row in param.iterrows():
-        code = mp_row[col_mp_param]
-        stock_secu = mp_row.get('stock_secu_actuel', 0)
-        lead_time = mp_row.get('lead_time_j', 14)
-        moq = mp_row.get('moq_kg', 1000)
-        cout_unit = mp_row.get('cout_unitaire', 0)
-        designation = mp_row.get('designation', 'N/A')
-        cout_commande = mp_row.get('cout_commande', 500)
-        taux_stockage = mp_row.get('taux_stockage', 0.2)
+    # Consommation_J = Moyenne sur horizon
+    conso_total = df_besoin_jour.groupby('Code_MP')['Besoin_MP_KG'].sum().reset_index()
+    nb_jours = (df_besoin_jour['Date'].max() - df_besoin_jour['Date'].min()).days + 1 if not df_besoin_jour.empty else 1
+    conso_total['Consommation_J'] = conso_total['Besoin_MP_KG'] / nb_jours
 
-        # Historique conso
-        hist_total = conso[conso[col_mp_conso] == code].copy()
-        hist_total = hist_total.dropna(subset=['date'])
-        hist_12m = hist_total[hist_total['date'].dt.date >= date_12_mois].copy()
-        hist = hist_12m if len(hist_12m) >= 10 else hist_total
+    # MRP Final
+    df_result = pd.merge(param, conso_total[['Code_MP', 'Consommation_J']], on='Code_MP', how='left')
 
-        conso_prevue_30j = 0
-        conso_moy_j = 0
-        demande_annuelle = 0
-        has_forecast = False
-        date_rupture = None
-        risque_pct = 0
-        prevision_m1 = 0
-        prevision_m2 = 0
-        prevision_m3 = 0
+    # Meilleur fournisseur
+    fournis['Score'] = (fournis['Taux_Service'].fillna(0) * 0.4 + fournis['Fiabilite'].fillna(0) * 0.3 + fournis['Note_Qualite'].fillna(0) * 20 * 0.3)
+    best_fournis = fournis.sort_values('Score', ascending=False).drop_duplicates('Code_MP')
+    df_result = pd.merge(df_result, best_fournis[['Code_MP', 'Fournisseur', 'Prix_EUR', 'Delai_Fournis', 'Score']], on='Code_MP', how='left')
 
-        # Prophet sur historique
-        if len(hist) >= 3:
-            df_prophet = hist.groupby('date')['qte_consommee_kg'].sum().reset_index()
-            df_prophet.columns = ['ds', 'y']
-            df_prophet = df_prophet.dropna()
-            if len(df_prophet) >= 3:
-                try:
-                    m = Prophet(yearly_seasonality=len(df_prophet)>60, weekly_seasonality=True, daily_seasonality=False)
-                    m.fit(df_prophet)
-                    future = m.make_future_dataframe(periods=90)
-                    forecast = m.predict(future)
-                    fc_future = forecast[forecast['ds'].dt.date > date_actuelle].copy()
-                    if len(fc_future) >= 30:
-                        prevision_m1 = max(0, fc_future.head(30)['yhat'].sum())
-                        prevision_m2 = max(0, fc_future.iloc[30:60]['yhat'].sum()) if len(fc_future) >= 60 else 0
-                        prevision_m3 = max(0, fc_future.iloc[60:90]['yhat'].sum()) if len(fc_future) >= 90 else 0
-                        conso_prevue_30j = prevision_m1
-                    else:
-                        conso_prevue_30j = max(0, fc_future['yhat'].sum())
-                        prevision_m1 = conso_prevue_30j
-                        prevision_m2 = conso_prevue_30j
-                        prevision_m3 = conso_prevue_30j
-                    conso_moy_j = df_prophet['y'].mean()
-                    demande_annuelle = conso_moy_j * 365
-                    forecasts_dict[code] = forecast
-                    has_forecast = True
-                    # Date rupture
-                    if stock_secu <= 0:
-                        date_rupture = date_actuelle
-                        risque_pct = 100
-                    else:
-                        stock_simule = stock_secu
-                        for idx, row in forecast.iterrows():
-                            if row['ds'].date() <= date_actuelle:
-                                continue
-                            stock_simule -= max(0, row['yhat'])
-                            if stock_simule <= 0:
-                                date_rupture = row['ds'].date()
-                                jours_restants = (date_rupture - date_actuelle).days
-                                risque_pct = max(0, min(100, 100 - (jours_restants / lead_time * 100)))
-                                break
-                except:
-                    conso_moy_j = df_prophet['y'].mean() if len(df_prophet) > 0 else 0
-                    conso_prevue_30j = conso_moy_j * 30
-                    prevision_m1 = conso_prevue_30j
-                    prevision_m2 = conso_prevue_30j
-                    prevision_m3 = conso_prevue_30j
-                    demande_annuelle = conso_moy_j * 365
+    # Calculs MRP
+    df_result = df_result.fillna(0)
+    df_result['Consommation_J'] = df_result['Consommation_J'].replace(0, 0.1)
+    df_result['Couverture_J'] = df_result['Stock'] / df_result['Consommation_J']
+    df_result['Stock_Sécu'] = df_result['Consommation_J'] * 12
+    df_result['Écart'] = df_result['Stock'] - df_result['Stock_Sécu']
+    df_result['Valeur_Risque'] = df_result['Écart'].clip(upper=0).abs() * df_result['Prix_EUR']
+    df_result['Date_Rupture'] = pd.to_datetime(datetime.now()) + pd.to_timedelta(df_result['Couverture_J'], unit='D')
 
-        if conso_moy_j == 0:
-            conso_moy_j = 0.1
+    demande_annuelle = df_result['Consommation_J'] * 365
+    cout_stockage = df_result['Prix_EUR'] * 0.2
+    df_result['EOQ'] = np.sqrt((2 * demande_annuelle * 500) / cout_stockage.clip(lower=0.1))
+    df_result['Point_Cmd'] = df_result['Consommation_J'] * df_result['Lead_Time'].fillna(14)
+    df_result['Date_Cmd_Optimale'] = df_result['Date_Rupture'] - pd.to_timedelta(df_result['Lead_Time'].fillna(14), unit='D')
+    df_result['Qté_Suggérée_IA'] = df_result.apply(lambda r: max(abs(r['Écart']), r['EOQ'], r['MOQ']) if r['Écart'] < 0 else max(r['EOQ'], r['MOQ']), axis=1)
 
-        besoin_mrp = mrp[mrp[col_mp_mrp] == code][col_qte_mrp].sum()
-        besoin_mrp = 0 if pd.isna(besoin_mrp) else besoin_mrp
-        couverture_j = stock_secu / conso_moy_j if conso_moy_j > 0 else 999
-        besoin_total = besoin_mrp + conso_prevue_30j
-        ecart = stock_secu - besoin_total
-        valeur_risque = abs(ecart) * cout_unit if ecart < 0 else 0
-        cout_stockage_unit = cout_unit * taux_stockage
-        eoq = calcul_eoq(demande_annuelle, cout_commande, cout_stockage_unit, cout_unit)
-        point_commande = conso_moy_j * lead_time
+    conditions = [(df_result['Écart'] < -df_result['MOQ']), (df_result['Écart'] < 0), (df_result['Couverture_J'] < 4)]
+    df_result['Statut_IA'] = np.select(conditions, ['🔴 Urgent', '🟠 À Planifier', '🔴 Critique'], default='🟢 Sécurisé')
 
-        date_cmd_optimale = None
-        qte_suggeree_ia = 0
-        statut_ia = "✅ Sécurisé"
-        if ecart < 0:
-            qte_suggeree_ia = max(abs(ecart), eoq, moq)
-            statut_ia = "🔴 Urgent"
-            risque_pct = 100
-            date_rupture = date_actuelle
-            date_cmd_optimale = date_actuelle
-        else:
-            if date_rupture:
-                date_cmd_optimale = date_rupture - timedelta(days=lead_time)
-                jours_avant_cmd = (date_cmd_optimale - date_actuelle).days
-                qte_suggeree_ia = max(eoq, moq)
-                if jours_avant_cmd <= 0:
-                    statut_ia = "🔴 Urgent"
-                    date_cmd_optimale = date_actuelle
-                elif jours_avant_cmd <= 7:
-                    statut_ia = "🟠 À Planifier"
-                else:
-                    statut_ia = "🟡 Surveiller"
+    conditions2 = [(df_result['Couverture_J'] < 4), (df_result['Couverture_J'] < 6), (df_result['Couverture_J'] < 12)]
+    df_result['Statut'] = np.select(conditions2, ['🔴 CRITIQUE', '🟠 TENSION', '🟡 ALERTE'], default='🟢 ALIGNÉ')
+    df_result['Action'] = df_result.apply(lambda r: f"Commander {r['Qté_Suggérée_IA']:,.0f} kg" if r['Écart'] < 0 else "Pas d'action", axis=1)
+    df_result['Risque_%'] = np.where(df_result['Couverture_J'] <= 0, 100, np.maximum(0, np.minimum(100, 100 - (df_result['Couverture_J'] / df_result['Lead_Time'].fillna(14) * 100))))
 
-        if len(hist) == 0:
-            statut = "⚪ PAS DE DONNÉES"
-            action = "Vérifier historique conso"
-        elif ecart < -moq:
-            statut = "🔴 CRITIQUE"
-            action = f"Commander {max(abs(ecart), eoq):,.0f} kg"
-        elif ecart < 0:
-            statut = "🟠 TENSION"
-            action = f"Commander {max(moq, eoq):,.0f} kg"
-        else:
-            statut = "🟢 ALIGNÉ"
-            action = "Pas d'action"
-
-        fournis_mp = fournis[fournis[col_mp_fournis] == code].copy()
-        if len(fournis_mp) > 0:
-            fournis_mp['score'] = (fournis_mp['taux_service_%'].fillna(0) * 0.4 + fournis_mp['fiabilite_%'].fillna(0) * 0.3 + fournis_mp['note_qualite_5'].fillna(0) * 20 * 0.3)
-            best = fournis_mp.nlargest(1, 'score').iloc[0]
-            fournisseur = best['nom_fournisseur']
-            delai = best['lead_time_j']
-            score_fourni = best['score']
-        else:
-            fournisseur = "N/A"
-            delai = lead_time
-            score_fourni = 0
-
-        resultats.append({'Code_MP': code, 'Désignation': designation, 'Stock': stock_secu, 'Besoin_MRP': besoin_mrp, 'Conso_30j': conso_prevue_30j, 'Écart': ecart, 'Couverture_J': couverture_j, 'Valeur_Risque': valeur_risque, 'EOQ': eoq, 'Point_Cmd': point_commande, 'Statut': statut, 'Action': action, 'Fournisseur': fournisseur, 'Délai': delai, 'Score_Fourni': score_fourni, 'Conso_Moy_J': conso_moy_j, 'Has_Forecast': has_forecast, 'Cout_Unit': cout_unit, 'Date_Rupture_Prévue': date_rupture, 'Date_Cmd_Optimale': date_cmd_optimale, 'Qté_Suggérée_IA': qte_suggeree_ia, 'Risque_%': risque_pct, 'Statut_IA': statut_ia, 'Prév_M+1': prevision_m1, 'Prév_M+2': prevision_m2, 'Prév_M+3': prevision_m3})
-
-    df_result = pd.DataFrame(resultats)
     df_result = classification_abc(df_result)
-    return df_result, forecasts_dict, fournis
+    return df_result, df_besoin_jour
 
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🚀 MRP Pro Dashboard V5.2 - Fix Conso/J")
-st.caption("Rolling 12M + Toast Alerts + PDF Export + Gantt + Search Global")
+st.title("🚀 MRP Pro V5.2 - Kolchi Raj3")
+st.caption("Rolling 12M + Toast + PDF + Gantt + Chat IA + Fix Conso/J")
 
 param, conso, mrp, fournis = charger_donnees_google()
 if param is None:
     st.stop()
 
-df_result, forecasts, df_fournis_all = analyser_mrp_appro(param, conso, mrp, fournis)
+df_result, df_besoin_jour = analyser_mrp_appro(param, conso, mrp, fournis)
 if len(df_result) == 0:
     st.warning("Aucun MP dans Param")
     st.stop()
 
-# TOAST NOTIFICATIONS
+# TOAST
 urgents = df_result[df_result['Statut_IA'].str.contains('Urgent')]
 if len(urgents) > 0:
-    codes_urgents = ", ".join(urgents['Code_MP'].head(3).tolist())
+    codes = ", ".join(urgents['Code_MP'].head(3).tolist())
     if len(urgents) > 3:
-        codes_urgents += f" + {len(urgents)-3} autres"
-    st.toast(f"🔴 URGENT: {codes_urgents} - Commander lyoum!", icon='🔥')
+        codes += f" + {len(urgents)-3} autres"
+    st.toast(f"🔴 URGENT: {codes} - Commander lyoum!", icon='🔥')
 
-# SIDEBAR + SEARCH
+# SIDEBAR
 st.sidebar.header("⚙️ Configuration")
-st.sidebar.info(f"📅 Date: {datetime.now().strftime('%d/%m/%Y')}\n\n🔄 Rolling: Akhr 12 chehar")
-search_query = st.sidebar.text_input("🔍 Search Global", placeholder="Code MP, Désignation, Fournisseur...")
-if search_query:
-    mask = df_result.apply(lambda row: search_query.lower() in str(row).lower(), axis=1)
+st.sidebar.info(f"📅 {datetime.now().strftime('%d/%m/%Y')}")
+search = st.sidebar.text_input("🔍 Search Global", placeholder="Code MP, Désignation...")
+if search:
+    mask = df_result.apply(lambda row: search.lower() in str(row).lower(), axis=1)
     df_result = df_result[mask]
     st.sidebar.success(f"✅ {len(df_result)} résultats")
-if st.sidebar.button("🔄 Actualiser Données", use_container_width=True):
+if st.sidebar.button("🔄 Actualiser", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Dashboard", "🤖 Plan Appro IA", "📅 Prévisions", "🏭 Fournisseurs", "🎯 Simulateur", "💬 Chat IA"])
 
 with tab1:
-    st.subheader("📊 KPIs Globaux - Version Pro")
-    col1, col2, col3, col4 = st.columns(4)
-    total_mp = len(df_result)
-    critiques = len(df_result[df_result['Statut'].str.contains('CRITIQUE')])
-    urgents_ia = len(df_result[df_result['Statut_IA'].str.contains('Urgent')])
-    valeur_risque_tot = df_result['Valeur_Risque'].sum()
-    with col1:
-        st.markdown(kpi_card_html("Total MPs", total_mp, "↑ Actif", "📦", ""), unsafe_allow_html=True)
-    with col2:
-        st.markdown(kpi_card_html("Critiques", critiques, "⚠️ Attention", "🔴", "kpi-card-red"), unsafe_allow_html=True)
-    with col3:
-        st.markdown(kpi_card_html("Urgents IA", urgents_ia, "🔥 Action", "🤖", "kpi-card-orange"), unsafe_allow_html=True)
-    with col4:
-        st.markdown(kpi_card_html("Valeur Risque", f"{valeur_risque_tot:,.0f}", "MAD", "💰", "kpi-card-green"), unsafe_allow_html=True)
+    st.subheader("📊 KPIs Globaux")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(kpi_card_html("Total MPs", len(df_result), "↑ Actif", "📦", ""), unsafe_allow_html=True)
+    c2.markdown(kpi_card_html("Critiques", len(df_result[df_result['Statut'].str.contains('CRITIQUE')]), "⚠️", "🔴", "kpi-card-red"), unsafe_allow_html=True)
+    c3.markdown(kpi_card_html("Urgents IA", len(df_result[df_result['Statut_IA'].str.contains('Urgent')]), "🔥", "🤖", "kpi-card-orange"), unsafe_allow_html=True)
+    c4.markdown(kpi_card_html("Valeur Risque", f"{df_result['Valeur_Risque'].sum():,.0f}", "EUR", "💰", "kpi-card-green"), unsafe_allow_html=True)
     st.divider()
-    st.subheader(f"📋 Détail par MP - {total_mp} MPs")
-    colf1, colf2, colf3 = st.columns(3)
-    statut_filter = colf1.multiselect("Statut", df_result['Statut'].unique(), default=df_result['Statut'].unique())
-    classe_filter = colf2.multiselect("Classe ABC", ['A', 'B', 'C'], default=['A', 'B', 'C'])
-    df_filtre = df_result[df_result['Statut'].isin(statut_filter) & df_result['Classe'].isin(classe_filter)]
-    st.dataframe(df_filtre[['Code_MP', 'Désignation', 'Classe', 'Stock', 'Écart', 'Couverture_J', 'Statut_IA', 'Date_Cmd_Optimale', 'Action']], use_container_width=True, height=400, column_config={"Couverture_J": st.column_config.NumberColumn("Couv. J", format="%.0f j"), "Écart": st.column_config.NumberColumn(format="%d kg"), "Date_Cmd_Optimale": st.column_config.DateColumn("Date Cmd IA", format="DD/MM/YYYY")})
+    st.dataframe(df_result[[
+        'Code_MP', 'Désignation', 'Classe', 'Stock', 'Consommation_J', 'Couverture_J',
+        'Statut_IA', 'Date_Cmd_Optimale', 'Action'
+    ]], use_container_width=True, height=500, column_config={
+        "Stock": st.column_config.NumberColumn(format="%.0f kg"),
+        "Consommation_J": st.column_config.NumberColumn("Conso/J", format="%.1f kg"),
+        "Couverture_J": st.column_config.NumberColumn("Couv. J", format="%.0f j"),
+        "Date_Cmd_Optimale": st.column_config.DateColumn("Cmd Avant", format="DD/MM/YYYY"),
+    })
 
 with tab2:
     st.subheader("🤖 Plan d'Approvisionnement IA")
-    col_btn1, col_btn2 = st.columns([3, 1])
-    df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy()
-    df_ia = df_ia.sort_values('Date_Cmd_Optimale')
-    with col_btn2:
-        if len(df_ia) > 0:
-            pdf_buffer = generer_pdf_plan_appro(df_ia)
-            st.download_button("📄 Export PDF", pdf_buffer, f"Plan_Appro_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
-    st.info("💡 **Logique V4.7:** Ila `Statut_IA = Urgent`, `Commander Avant = Aujourd'hui`")
+    df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy().sort_values('Date_Cmd_Optimale')
+    if st.button("📄 Export PDF", key="pdf"):
+        pdf_buffer = generer_pdf_plan_appro(df_ia)
+        st.download_button("⬇️ Télécharger", pdf_buffer, f"Plan_Appro_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
     if len(df_ia) == 0:
-        st.success("✅ Aucune commande à planifier. Kolchi sécurisé!")
+        st.success("✅ Kolchi sécurisé!")
     else:
-        col1, col2, col3, col4 = st.columns(4)
-        urgents = len(df_ia[df_ia['Statut_IA'].str.contains('Urgent')])
-        a_planifier = len(df_ia[df_ia['Statut_IA'].str.contains('À Planifier')])
-        surveiller = len(df_ia[df_ia['Statut_IA'].str.contains('Surveiller')])
-        valeur_cmd_tot = (df_ia['Qté_Suggérée_IA'] * df_ia['Cout_Unit']).sum()
-        col1.metric("🔴 Urgents", urgents)
-        col2.metric("🟠 À Planifier", a_planifier)
-        col3.metric("🟡 Surveiller", surveiller)
-        col4.metric("💰 Valeur Cmd Total", f"{valeur_cmd_tot:,.0f} MAD")
-        st.divider()
-        st.dataframe(df_ia[['Code_MP', 'Désignation', 'Statut_IA', 'Date_Rupture_Prévue', 'Date_Cmd_Optimale', 'Qté_Suggérée_IA', 'Fournisseur', 'Risque_%']], use_container_width=True, height=400, column_config={"Date_Rupture_Prévue": st.column_config.DateColumn("Rupture Prévue", format="DD/MM/YYYY"), "Date_Cmd_Optimale": st.column_config.DateColumn("Commander Avant", format="DD/MM/YYYY"), "Qté_Suggérée_IA": st.column_config.NumberColumn("Qté IA (kg)", format="%.0f"), "Risque_%": st.column_config.ProgressColumn("Risque", min_value=0, max_value=100, format="%.0f%%")})
-        st.subheader("📊 Gantt Chart - Commandes 90 Jours")
+        st.dataframe(df_ia[['Code_MP', 'Désignation', 'Statut_IA', 'Date_Rupture', 'Date_Cmd_Optimale', 'Qté_Suggérée_IA', 'Fournisseur', 'Risque_%']], use_container_width=True, height=400)
+        st.subheader("📊 Gantt Chart - 90 Jours")
         df_gantt = df_ia[df_ia['Date_Cmd_Optimale'] <= datetime.now().date() + timedelta(days=90)].copy()
         if len(df_gantt) > 0:
             gantt_data = []
             for _, row in df_gantt.iterrows():
                 start_date = row['Date_Cmd_Optimale']
-                end_date = start_date + timedelta(days=row['Délai'])
+                end_date = start_date + timedelta(days=row['Lead_Time'])
                 gantt_data.append(dict(Task=row['Code_MP'], Start=start_date, Finish=end_date, Resource=row['Statut_IA']))
-            fig_gantt = ff.create_gantt(gantt_data, colors={'🔴 Urgent': 'rgb(245, 87, 108)', '🟠 À Planifier': 'rgb(255, 165, 0)', '🟡 Surveiller': 'rgb(78, 205, 196)'}, index_col='Resource', show_colorbar=True, group_tasks=True, title='Timeline Commandes avec Lead Time')
-            fig_gantt.update_layout(height=400)
+            fig_gantt = ff.create_gantt(gantt_data, colors={'🔴 Urgent': 'rgb(245, 87, 108)', '🟠 À Planifier': 'rgb(255, 165, 0)', '🟡 Surveiller': 'rgb(78, 205, 196)'}, index_col='Resource', show_colorbar=True, group_tasks=True)
             st.plotly_chart(fig_gantt, use_container_width=True)
 
 with tab3:
-    st.subheader("📅 Prévisions Mensuelles - Rolling 12 Mois")
-    df_prev = df_result[['Code_MP', 'Désignation', 'Prév_M+1', 'Prév_M+2', 'Prév_M+3', 'Conso_Moy_J']].copy()
+    st.subheader("📅 Prévisions 3 Mois")
+    df_prev = df_result[['Code_MP', 'Désignation', 'Prév_M+1', 'Prév_M+2', 'Prév_M+3']].copy()
     mois1 = (datetime.now() + relativedelta(months=1)).strftime('%b %Y')
     mois2 = (datetime.now() + relativedelta(months=2)).strftime('%b %Y')
     mois3 = (datetime.now() + relativedelta(months=3)).strftime('%b %Y')
-    df_prev = df_prev.rename(columns={'Prév_M+1': f'Prév {mois1}', 'Prév_M+2': f'Prév {mois2}', 'Prév_M+3': f'Prév {mois3}', 'Conso_Moy_J': 'Moy/J (kg)'})
+    df_prev = df_prev.rename(columns={'Prév_M+1': f'Prév {mois1}', 'Prév_M+2': f'Prév {mois2}', 'Prév_M+3': f'Prév {mois3}'})
     st.dataframe(df_prev, use_container_width=True, height=400)
 
 with tab4:
     st.subheader("🏭 Analyse Fournisseurs")
-    df_fourni_score = df_result[df_result['Fournisseur']!= 'N/A'].groupby('Fournisseur').agg({'Score_Fourni': 'mean', 'Code_MP': 'count', 'Valeur_Risque': 'sum'}).reset_index().rename(columns={'Code_MP': 'Nb_MPs'}).sort_values('Score_Fourni', ascending=False)
-    col1, col2 = st.columns(2)
-    with col1:
-        if len(df_fourni_score) > 0:
-            fig = px.bar(df_fourni_score, x='Fournisseur', y='Score_Fourni', title="Score Moyen", color='Score_Fourni', color_continuous_scale='RdYlGn', text='Nb_MPs')
-            st.plotly_chart(fig, use_container_width=True)
-    with col2:
-        if df_fourni_score['Valeur_Risque'].sum() > 0:
-            fig2 = px.pie(df_fourni_score, values='Valeur_Risque', names='Fournisseur', title="Valeur à Risque")
-            st.plotly_chart(fig2, use_container_width=True)
-    st.dataframe(df_fournis_all, use_container_width=True)
+    fournis['Score'] = (fournis['Taux_Service'].fillna(0) * 0.4 + fournis['Fiabilite'].fillna(0) * 0.3 + fournis['Note_Qualite'].fillna(0) * 20 * 0.3).round(1)
+    df_score = fournis.groupby('Fournisseur').agg({'Score': 'mean', 'Prix_EUR': 'mean', 'Delai_Fournis': 'mean', 'Code_MP': 'count'}).round(1).reset_index().rename(columns={'Code_MP': 'Nb_MP'})
+    c1, c2 = st.columns(2)
+    c1.plotly_chart(px.bar(df_score.sort_values('Score', ascending=False), x='Fournisseur', y='Score', color='Score', color_continuous_scale='RdYlGn', text='Nb_MP'), use_container_width=True)
+    c2.plotly_chart(px.scatter(df_score, x='Prix_EUR', y='Score', size='Nb_MP', hover_name='Fournisseur'), use_container_width=True)
+    st.dataframe(fournis, use_container_width=True)
 
 with tab5:
-    st.subheader("🎯 Simulateur What-If - VERSION VISUELLE")
-    col1, col2, col3 = st.columns(3)
-    mp_sim = col1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp_v8")
-    qte_sim = col2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte_v8")
-    mp_data_sim = df_result[df_result['Code_MP'] == mp_sim].iloc[0].copy()
-    for col in ['Stock', 'Écart', 'Couverture_J', 'Conso_Moy_J']:
-        if pd.isna(mp_data_sim[col]):
-            mp_data_sim[col] = 0
-    nouveau_stock = mp_data_sim['Stock'] + qte_sim
-    nouveau_ecart = nouveau_stock - (mp_data_sim['Besoin_MRP'] + mp_data_sim['Conso_30j'])
-    nouvelle_couv = nouveau_stock / mp_data_sim['Conso_Moy_J'] if mp_data_sim['Conso_Moy_J'] > 0 else 999
-    st.divider()
-    col_g1, col_g2, col_g3 = st.columns(3)
-    with col_g1:
-        fig_stock = go.Figure()
-        fig_stock.add_trace(go.Bar(x=['Stock Actuel', 'Après Commande'], y=[mp_data_sim['Stock'], nouveau_stock], marker_color=['#FF6B', '#4ECDC4'], text=[f"{mp_data_sim['Stock']:,.0f}", f"{nouveau_stock:,.0f}"], textposition='auto'))
-        fig_stock.update_layout(title="📦 Stock (kg)", yaxis_title="Kg", showlegend=False, height=300)
-        st.plotly_chart(fig_stock, use_container_width=True)
-    with col_g2:
-        color_avant = '#FF6B6B' if mp_data_sim['Écart'] < 0 else '#4ECDC4'
-        color_apres = '#FF6B6B' if nouveau_ecart < 0 else '#4ECDC4'
-        fig_ecart = go.Figure()
-        fig_ecart.add_trace(go.Bar(x=['Écart Actuel', 'Après Commande'], y=[mp_data_sim['Écart'], nouveau_ecart], marker_color=[color_avant, color_apres], text=[f"{mp_data_sim['Écart']:,.0f}", f"{nouveau_ecart:,.0f}"], textposition='auto'))
-        fig_ecart.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="Seuil 0")
-        fig_ecart.update_layout(title="⚖️ Écart (kg)", yaxis_title="Kg", showlegend=False, height=300)
-        st.plotly_chart(fig_ecart, use_container_width=True)
-    with col_g3:
-        color_couv_avant = '#FF6B6B' if mp_data_sim['Couverture_J'] < 7 else '#FFA500' if mp_data_sim['Couverture_J'] < 14 else '#4ECDC4'
-        color_couv_apres = '#FF6B6B' if nouvelle_couv < 7 else '#FFA500' if nouvelle_couv < 14 else '#4ECDC4'
-        fig_couv = go.Figure()
-        fig_couv.add_trace(go.Bar(x=['Couv. Actuelle', 'Après Commande'], y=[mp_data_sim['Couverture_J'], nouvelle_couv], marker_color=[color_couv_avant, color_couv_apres], text=[f"{mp_data_sim['Couverture_J']:.0f}j", f"{nouvelle_couv:.0f}j"], textposition='auto'))
-        fig_couv.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="Critique")
-        fig_couv.add_hline(y=14, line_dash="dash", line_color="orange", annotation_text="Tension")
-        fig_couv.update_layout(title="📅 Couverture (jours)", yaxis_title="Jours", showlegend=False, height=300)
-        st.plotly_chart(fig_couv, use_container_width=True)
-    st.divider()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"+{qte_sim:,.0f}")
-    col2.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg", f"{nouveau_ecart - mp_data_sim['Écart']:,.0f}")
-    col3.metric("Nouvelle Couverture", f"{nouvelle_couv:.0f} jours", f"{nouvelle_couv - mp_data_sim['Couverture_J']:.0f}")
-    col4.metric("Coût Commande", f"{qte_sim * mp_data_sim['Cout_Unit']:,.0f} MAD")
+    st.subheader("🎯 Simulateur What-If")
+    c1, c2 = st.columns(2)
+    mp_sim = c1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp")
+    qte_sim = c2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte")
+    mp_data = df_result[df_result['Code_MP'] == mp_sim].iloc[0].copy()
+    nouveau_stock = mp_data['Stock'] + qte_sim
+    nouveau_ecart = nouveau_stock - (mp_data['Besoin_MRP'] + mp_data['Conso_30j'])
+    nouvelle_couv = nouveau_stock / mp_data['Conso_Moy_J']
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Nouveau Stock", f"{nouveau_stock:,.0f} kg", f"+{qte_sim:,.0f}")
+    c2.metric("Nouvel Écart", f"{nouveau_ecart:,.0f} kg")
+    c3.metric("Nouvelle Couv.", f"{nouvelle_couv:.0f} jours")
+    c4.metric("Coût Cmd", f"{qte_sim * mp_data['Prix_EUR']:,.0f} EUR")
     if nouveau_ecart >= 0:
-        st.success(f"✅ **VERDICT: ALIGNÉ** → Avec {qte_sim:,.0f} kg, **{mp_sim} ywlli VERT**!")
-    elif nouveau_ecart >= -mp_data_sim['EOQ']:
-        st.warning(f"🟠 **VERDICT: TENSION** → **{mp_sim} ba9i ORANGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+        st.success(f"✅ **ALIGNÉ** → {mp_sim} ywlli VERT!")
+    elif nouveau_ecart >= -mp_data['EOQ']:
+        st.warning(f"🟠 **TENSION** → {mp_sim} ba9i ORANGE.")
     else:
-        st.error(f"🔴 **VERDICT: CRITIQUE** → **{mp_sim} ba9i ROUGE**. Khass {abs(nouveau_ecart):,.0f} kg zayda.")
+        st.error(f"🔴 **CRITIQUE** → {mp_sim} ba9i ROUGE.")
 
 with tab6:
-    st.subheader("💬 Chat IA Pro - Version Stable")
-    st.caption("Version bla syntax errors ✅")
+    st.subheader("💬 Chat IA Pro")
+    st.caption("Swwl 3la: plan, prevision, risque, abc, fournisseur")
     if "messages" not in st.session_state:
         st.session_state.messages = []
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-    if prompt := st.chat_input("Swwl 3la: plan, prevision, risque, abc, fournisseur"):
+    if prompt := st.chat_input("Swwl hna..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -469,4 +327,36 @@ with tab6:
                 lines = [f"📅 **Plan Commande IA - {len(df_c)} MPs:**\n"]
                 for _, row in df_c.head(10).iterrows():
                     d = row['Date_Cmd_Optimale'].strftime('%d/%m')
-                    lines.append(f"**{d}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f}
+                    lines.append(f"**{d}**: {row['Code_MP']} - {row['Qté_Suggérée_IA']:,.0f} kg - {row['Statut_IA']}")
+                lines.append(f"\n💰 **Total:** {(df_c['Qté_Suggérée_IA'] * df_c['Prix_EUR']).sum():,.0f} EUR")
+                r = "\n".join(lines)
+            else:
+                r = "✅ **Kolchi sécurisé!** Ma kayn 7ta commande."
+        elif "prevision" in p or "prev" in p:
+            lines = ["📊 **Prévisions 3 Mois:**\n"]
+            for _, row in df_result.iterrows():
+                lines.append(f"**{row['Code_MP']}**: {row['Prév_M+1']:,.0f} / {row['Prév_M+2']:,.0f} / {row['Prév_M+3']:,.0f} kg")
+            r = "\n".join(lines)
+        elif "risque" in p:
+            crit = df_result[df_result['Risque_%'] > 50]
+            if len(crit) > 0:
+                lines = [f"⚠️ **{len(crit)} MPs à Risque > 50%:**\n"]
+                for _, row in crit.head(10).iterrows():
+                    lines.append(f"**{row['Code_MP']}**: {row['Risque_%']:.0f}% - {row['Statut_IA']}")
+                r = "\n".join(lines)
+            else:
+                r = "✅ Aucun MP à risque élevé."
+        elif "abc" in p:
+            abc_counts = df_result['Classe'].value_counts()
+            r = f"📊 **Classification ABC:**\n\n**A**: {abc_counts.get('A', 0)} MPs\n**B**: {abc_counts.get('B', 0)} MPs\n**C**: {abc_counts.get('C', 0)} MPs"
+        elif "fournisseur" in p:
+            df_f = df_result[df_result['Fournisseur']!= 'N/A'].groupby('Fournisseur').agg({'Score_Fourni': 'mean', 'Code_MP': 'count'}).reset_index().sort_values('Score_Fourni', ascending=False)
+            lines = ["🏭 **Top Fournisseurs:**\n"]
+            for _, row in df_f.head(5).iterrows():
+                lines.append(f"**{row['Fournisseur']}**: Score {row['Score_Fourni']:.1f} - {row['Code_MP']} MPs")
+            r = "\n".join(lines)
+        else:
+            r = "Swwl 3la: `plan`, `prevision`, `risque`, `abc`, `fournisseur`"
+        st.session_state.messages.append({"role": "assistant", "content": r})
+        with st.chat_message("assistant"):
+            st.markdown(r)
