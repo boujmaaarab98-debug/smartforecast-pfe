@@ -16,3 +16,29 @@ st.write(data["fournisseurs"])
 
 st.subheader("Conso")
 st.write(data["conso"])
+
+import pandas as pd
+
+def calculate_plan(param, conso):
+    # merge data
+    df = param.merge(conso, on="code_mp")
+
+    # consommation journalière
+    df["conso_j"] = df["conso_mensuelle"] / 30
+
+    # couverture
+    df["couverture_j"] = df["stock_actuel"] / df["conso_j"]
+
+    # besoin
+    df["besoin"] = df["lead_time_j"] - df["couverture_j"]
+
+    # decision
+    df["a_commander"] = df["besoin"] > 0
+
+    # quantité
+    df["qte_commande"] = df.apply(
+        lambda x: x["moq_kg"] if x["a_commander"] else 0,
+        axis=1
+    )
+
+    return df
