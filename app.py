@@ -6,11 +6,12 @@ from datetime import datetime, timedelta
 import numpy as np
 from io import BytesIO
 import zipfile
+import re
 
-st.set_page_config(page_title="MRP Pro V4.13.4 - Fix Fasila", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="MRP Pro V4.13.5 - Smart Fasila", page_icon="🚀", layout="wide")
 
-st.title("🚀 MRP Pro Dashboard V4.13.4 - Fix Fasila Milliers")
-st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Stock + Conso S7i7")
+st.title("🚀 MRP Pro Dashboard V4.13.5 - Smart Decimal")
+st.caption("Rouge: 4j | Orange: 6j | Stock Min: 12j | Fasila S7i7a")
 
 # ==================== 1. SEUILS PROFESSIONNELS ====================
 SEUIL_ROUGE = 4
@@ -31,25 +32,40 @@ URL_CONSO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuO
 URL_FOURNIS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAmHiaSuux6KR72VvUGqN6W6cATE7jJmCdU__MuQHH-ejq1zLygGk5ZCYrrKn/pub?gid=1581263595&single=true&output=csv"
 URL_MRP = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSNFTes3pBz0_uPvWuOAmHiaSuux6KR72VvUGqN6W6cATE7jJmCdU__MuQHH-ejq1zLygGk5ZCYrrKn/pub?gid=418845709&single=true&output=csv"
 
-# ==================== 3. FONCTIONS UTILES - FIX FASILA ====================
-def clean_numeric(series):
+# ==================== 3. FONCTIONS UTILES - SMART FASILA ====================
+def clean_numeric_smart(series):
     """
-    FIX: N7iydo fasila dyal milliers + espaces
-    1,234 → 1234 machi 1.234
-    1 234 → 1234
-    1.5 → 1.5
+    SMART: Kanfhm wach fasila = milliers ola décimale
+    1,5 → 1.5 (décimale)
+    1,50 → 1.5 (décimale)
+    1,500 → 1500 (milliers)
+    1,234,567 → 1234567 (milliers)
+    1 234 → 1234 (espace = milliers)
     """
-    return pd.to_numeric(
-        series.astype(str)
-     .str.replace(' ', '') # N7iydo espaces: "1 234" → "1234"
-     .str.replace(',', '') # FIX: N7iydo fasila dyal milliers: "1,234" → "1234"
-     .str.replace('€', '')
-     .str.replace('KG', '')
-     .str.replace('kg', '')
-     .str.replace('%', '') # Zid hadi l pourcentage
-     .str.strip(),
-        errors='coerce'
-    )
+    def convert_one(val):
+        if pd.isna(val):
+            return np.nan
+        s = str(val).strip().replace(' ', '').replace('€', '').replace('KG', '').replace('kg', '').replace('%', '')
+
+        # Ila fih point w fasila bjouj: 1.234,56 → 1234.56
+        if '.' in s and ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+            return pd.to_numeric(s, errors='coerce')
+
+        # Ila fih ghir fasila: nchouf ch7al mn r9am mn b3dha
+        if ',' in s:
+            parts = s.split(',')
+            if len(parts) == 2 and len(parts[1]) <= 2:
+                # 1,5 ola 1,50 → décimale
+                s = s.replace(',', '.')
+            else:
+                # 1,500 ola 1,234,567 → milliers
+                s = s.replace(',', '')
+            return pd.to_numeric(s, errors='coerce')
+
+        return pd.to_numeric(s, errors='coerce')
+
+    return series.apply(convert_one)
 
 def to_zip_csv(df_dict):
     zip_buffer = BytesIO()
@@ -75,7 +91,7 @@ def load_full_data():
         })
         for col in ['Délai_Param', 'MOQ_Param', 'Stock_Sécu_Sheet', 'Stock']:
             if col in df_param.columns:
-                df_param[col] = clean_numeric(df_param[col])
+                df_param[col] = clean_numeric_smart(df_param[col])
 
         df_conso = pd.read_csv(URL_CONSO)
         df_conso = df_conso.rename(columns={
@@ -85,8 +101,8 @@ def load_full_data():
             'Couverture : 2 semaine NBR OCTABIN': 'Couverture_Octab',
             'Projet': 'Projet'
         })
-        df_conso['Conso_U_Unitaire'] = clean_numeric(df_conso['Conso_U_Unitaire'])
-        df_conso['Couverture_Octab'] = clean_numeric(df_conso['Couverture_Octab'])
+        df_conso['Conso_U_Unitaire'] = clean_numeric_smart(df_conso['Conso_U_Unitaire'])
+        df_conso['Couverture_Octab'] = clean_numeric_smart(df_conso['Couverture_Octab'])
         df_conso = df_conso.dropna(subset=['Code_MP', 'Ref_PF'])
 
         df_fournis = pd.read_csv(URL_FOURNIS)
@@ -99,13 +115,13 @@ def load_full_data():
         })
         for col in ['Prix_EUR', 'MOQ_Fournis', 'Délai_Fournis', 'taux_service_%', 'fiabilite_%', 'note_qualite_5']:
             if col in df_fournis.columns:
-                df_fournis[col] = clean_numeric(df_fournis[col])
+                df_fournis[col] = clean_numeric_smart(df_fournis[col])
 
         df_prev_pf = pd.read_csv(URL_MRP)
         df_prev_pf = df_prev_pf.rename(columns={'Ref produit finis': 'Ref_PF'})
 
         df_prev_melt = df_prev_pf.melt(id_vars=['Ref_PF'], var_name='Date', value_name='Qte_PF_Prévue')
-        df_prev_melt['Qte_PF_Prévue'] = clean_numeric(df_prev_melt['Qte_PF_Prévue'])
+        df_prev_melt['Qte_PF_Prévue'] = clean_numeric_smart(df_prev_melt['Qte_PF_Prévue'])
         df_prev_melt = df_prev_melt.dropna(subset=['Qte_PF_Prévue'])
         df_prev_melt['Date'] = pd.to_datetime(df_prev_melt['Date'], dayfirst=True, errors='coerce')
         df_prev_melt = df_prev_melt.dropna(subset=['Date'])
@@ -155,11 +171,11 @@ if st.sidebar.button("🔄 Rafraîchir Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ==================== 6. INTERFACE V4.13.4 ====================
+# ==================== 6. INTERFACE V4.13.5 ====================
 tab1, tab2, tab3, tab4 = st.tabs(["📊 MRP Complet", "📈 KPIs Conso & Prévision PRO", "⚠️ Alertes", "🏢 Fournisseurs"])
 
 with tab1:
-    st.header("MRP Complet - Stock + Conso S7i7a")
+    st.header("MRP Complet - Fasila S7i7a")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🔴 Rouge <4j", df_mrp[df_mrp['Statut'] == 'Rouge'].shape[0])
     col2.metric("🟠 Orange <6j", df_mrp[df_mrp['Statut'] == 'Orange'].shape[0])
