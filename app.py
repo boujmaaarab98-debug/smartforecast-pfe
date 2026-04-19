@@ -17,8 +17,8 @@ from reportlab.lib.units import inch
 # ========================================
 # CONFIG + CSS PRO
 # ========================================
-SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM" # FIX NameError
-st.set_page_config(page_title="MRP Pro Dashboard V5.2", layout="wide", page_icon="🚀")
+SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
+st.set_page_config(page_title="MRP Pro Dashboard V5.3", layout="wide", page_icon="🚀")
 
 st.markdown("""
 <style>
@@ -53,7 +53,6 @@ def trouver_colonne(df, noms_possibles):
     return None
 
 def clean_numeric_smart(series):
-    """Smart: 1,5→1.5 | 1,500→1500 | 1,234,567→1234567"""
     def convert_one(val):
         if pd.isna(val): return np.nan
         s = str(val).strip().replace(' ', '').replace('€', '').replace('KG', '').replace('kg', '').replace('%', '')
@@ -74,32 +73,17 @@ def clean_numeric_smart(series):
 def charger_donnees_google():
     base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
     try:
-        # PARAM
         param = pd.read_csv(base_url + "Param")
-        param.columns = param.columns.str.strip()
-        param = param.rename(columns={'code_mp': 'Code_MP', 'designation': 'Désignation', 'lead_time_j': 'Lead_Time', 'moq_kg': 'MOQ', 'stock_actuel': 'Stock'})
-        for col in ['Lead_Time', 'MOQ', 'Stock']:
-            if col in param.columns: param[col] = clean_numeric_smart(param[col])
-
-        # CONSOM - FIX: Poids_Piece
         conso = pd.read_csv(base_url + "Conso")
-        conso.columns = conso.columns.str.strip()
-        conso = conso.rename(columns={'Ref produit finis': 'Ref_PF', 'CODE matière': 'Code_MP', 'Poids pièce': 'Poids_Piece', 'Projet': 'Projet'})
-        conso['Poids_Piece'] = clean_numeric_smart(conso['Poids_Piece'])
-        conso = conso.dropna(subset=['Code_MP', 'Ref_PF', 'Poids_Piece'])
-
-        # MRP
         mrp = pd.read_csv(base_url + "MRP")
-        mrp.columns = mrp.columns.str.strip()
-        mrp = mrp.rename(columns={'Ref produit finis': 'Ref_PF'})
-
-        # FOURNISSEURS
         fournis = pd.read_csv(base_url + "Fournisseurs")
-        fournis.columns = fournis.columns.str.strip()
-        fournis = fournis.rename(columns={'code_mp': 'Code_MP', 'nom_fournisseur': 'Fournisseur', 'prix_unitaire_eur': 'Prix_EUR', 'lead_time_j': 'Delai_Fournis', 'moq_kg': 'MOQ_Fournis', 'fiabilite_%': 'Fiabilite', 'taux_service_%': 'Taux_Service', 'note_qualite_5': 'Note_Qualite'})
-        for col in ['Prix_EUR', 'Delai_Fournis', 'MOQ_Fournis', 'Fiabilite', 'Taux_Service', 'Note_Qualite']:
-            if col in fournis.columns: fournis[col] = clean_numeric_smart(fournis[col])
-
+        for df in [param, conso, mrp, fournis]:
+            df.columns = df.columns.str.strip()
+            for col in df.columns:
+                if any(x in col.lower() for x in ['qte', 'stock', 'cout', 'moq', 'lead', 'taux', 'fiabilite', 'note', 'poids']):
+                    df[col] = clean_numeric_smart(df[col])
+        conso['date'] = pd.to_datetime(conso[trouver_colonne(conso, ['date'])], errors='coerce')
+        mrp['date_besoin'] = pd.to_datetime(mrp[trouver_colonne(mrp, ['date_besoin'])], errors='coerce')
         return param, conso, mrp, fournis
     except Exception as e:
         st.error(f"❌ Erreur: {e}")
@@ -141,32 +125,26 @@ def kpi_card_html(label, value, trend, icon, color_class=""):
     return f"""<div class="kpi-card {color_class}"><div class="kpi-label">{icon} {label}</div><div class="kpi-value">{value}</div><div class="kpi-trend">{trend}</div></div>"""
 
 def analyser_mrp_appro(param, conso, mrp, fournis):
-    # 1. Explosion MRP: PF × Dates → MP - FIX: Poids_Piece
     df_mrp_melt = mrp.melt(id_vars=['Ref_PF'], var_name='Date', value_name='Qte_PF_Prévue')
     df_mrp_melt['Qte_PF_Prévue'] = clean_numeric_smart(df_mrp_melt['Qte_PF_Prévue'])
     df_mrp_melt = df_mrp_melt.dropna(subset=['Qte_PF_Prévue'])
     df_mrp_melt['Date'] = pd.to_datetime(df_mrp_melt['Date'], dayfirst=True, errors='coerce')
     df_mrp_melt = df_mrp_melt.dropna(subset=['Date'])
 
-    # FIX: Jointure × Poids_Piece machi Conso_U_Unitaire
     df_besoin = pd.merge(df_mrp_melt, conso[['Ref_PF', 'Code_MP', 'Poids_Piece']], on='Ref_PF', how='inner')
     df_besoin['Besoin_MP_KG'] = df_besoin['Qte_PF_Prévue'] * df_besoin['Poids_Piece']
     df_besoin_jour = df_besoin.groupby(['Code_MP', 'Date'])['Besoin_MP_KG'].sum().reset_index()
 
-    # Consommation_J = Moyenne sur horizon
     conso_total = df_besoin_jour.groupby('Code_MP')['Besoin_MP_KG'].sum().reset_index()
     nb_jours = (df_besoin_jour['Date'].max() - df_besoin_jour['Date'].min()).days + 1 if not df_besoin_jour.empty else 1
     conso_total['Consommation_J'] = conso_total['Besoin_MP_KG'] / nb_jours
 
-    # MRP Final
     df_result = pd.merge(param, conso_total[['Code_MP', 'Consommation_J']], on='Code_MP', how='left')
 
-    # Meilleur fournisseur
     fournis['Score'] = (fournis['Taux_Service'].fillna(0) * 0.4 + fournis['Fiabilite'].fillna(0) * 0.3 + fournis['Note_Qualite'].fillna(0) * 20 * 0.3)
     best_fournis = fournis.sort_values('Score', ascending=False).drop_duplicates('Code_MP')
     df_result = pd.merge(df_result, best_fournis[['Code_MP', 'Fournisseur', 'Prix_EUR', 'Delai_Fournis', 'Score']], on='Code_MP', how='left')
 
-    # Calculs MRP
     df_result = df_result.fillna(0)
     df_result['Consommation_J'] = df_result['Consommation_J'].replace(0, 0.1)
     df_result['Couverture_J'] = df_result['Stock'] / df_result['Consommation_J']
@@ -196,35 +174,28 @@ def analyser_mrp_appro(param, conso, mrp, fournis):
 # ========================================
 # INTERFACE
 # ========================================
-st.title("🚀 MRP Pro V5.2 - Kolchi Raj3")
-st.caption("Rolling 12M + Toast + PDF + Gantt + Chat IA + Fix Conso/J")
+st.title("🚀 MRP Pro V5.3 - Fix Gantt")
+st.caption("Rolling 12M + Toast + PDF + Gantt Fixed + Chat IA")
 
 param, conso, mrp, fournis = charger_donnees_google()
-if param is None:
-    st.stop()
+if param is None: st.stop()
 
 df_result, df_besoin_jour = analyser_mrp_appro(param, conso, mrp, fournis)
-if len(df_result) == 0:
-    st.warning("Aucun MP dans Param")
-    st.stop()
+if len(df_result) == 0: st.warning("Aucun MP"); st.stop()
 
-# TOAST
 urgents = df_result[df_result['Statut_IA'].str.contains('Urgent')]
 if len(urgents) > 0:
     codes = ", ".join(urgents['Code_MP'].head(3).tolist())
-    if len(urgents) > 3:
-        codes += f" + {len(urgents)-3} autres"
-    st.toast(f"🔴 URGENT: {codes} - Commander lyoum!", icon='🔥')
+    if len(urgents) > 3: codes += f" + {len(urgents)-3} autres"
+    st.toast(f"🔴 URGENT: {codes}", icon='🔥')
 
-# SIDEBAR
-st.sidebar.header("⚙️ Configuration")
+st.sidebar.header("⚙️ Config")
 st.sidebar.info(f"📅 {datetime.now().strftime('%d/%m/%Y')}")
-search = st.sidebar.text_input("🔍 Search Global", placeholder="Code MP, Désignation...")
+search = st.sidebar.text_input("🔍 Search", placeholder="Code MP...")
 if search:
     mask = df_result.apply(lambda row: search.lower() in str(row).lower(), axis=1)
     df_result = df_result[mask]
-    st.sidebar.success(f"✅ {len(df_result)} résultats")
-if st.sidebar.button("🔄 Actualiser", use_container_width=True):
+if st.sidebar.button("🔄 Refresh", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
@@ -238,20 +209,12 @@ with tab1:
     c3.markdown(kpi_card_html("Urgents IA", len(df_result[df_result['Statut_IA'].str.contains('Urgent')]), "🔥", "🤖", "kpi-card-orange"), unsafe_allow_html=True)
     c4.markdown(kpi_card_html("Valeur Risque", f"{df_result['Valeur_Risque'].sum():,.0f}", "EUR", "💰", "kpi-card-green"), unsafe_allow_html=True)
     st.divider()
-    st.dataframe(df_result[[
-        'Code_MP', 'Désignation', 'Classe', 'Stock', 'Consommation_J', 'Couverture_J',
-        'Statut_IA', 'Date_Cmd_Optimale', 'Action'
-    ]], use_container_width=True, height=500, column_config={
-        "Stock": st.column_config.NumberColumn(format="%.0f kg"),
-        "Consommation_J": st.column_config.NumberColumn("Conso/J", format="%.1f kg"),
-        "Couverture_J": st.column_config.NumberColumn("Couv. J", format="%.0f j"),
-        "Date_Cmd_Optimale": st.column_config.DateColumn("Cmd Avant", format="DD/MM/YYYY"),
-    })
+    st.dataframe(df_result[['Code_MP', 'Désignation', 'Classe', 'Stock', 'Consommation_J', 'Couverture_J', 'Statut_IA', 'Date_Cmd_Optimale', 'Action']], use_container_width=True, height=500)
 
 with tab2:
     st.subheader("🤖 Plan d'Approvisionnement IA")
     df_ia = df_result[df_result['Date_Cmd_Optimale'].notna()].copy().sort_values('Date_Cmd_Optimale')
-    if st.button("📄 Export PDF", key="pdf"):
+    if st.button("📄 Export PDF"):
         pdf_buffer = generer_pdf_plan_appro(df_ia)
         st.download_button("⬇️ Télécharger", pdf_buffer, f"Plan_Appro_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf")
     if len(df_ia) == 0:
@@ -259,7 +222,8 @@ with tab2:
     else:
         st.dataframe(df_ia[['Code_MP', 'Désignation', 'Statut_IA', 'Date_Rupture', 'Date_Cmd_Optimale', 'Qté_Suggérée_IA', 'Fournisseur', 'Risque_%']], use_container_width=True, height=400)
         st.subheader("📊 Gantt Chart - 90 Jours")
-        df_gantt = df_ia[df_ia['Date_Cmd_Optimale'] <= datetime.now().date() + timedelta(days=90)].copy()
+        # FIX: pd.Timestamp + notna()
+        df_gantt = df_ia[df_ia['Date_Cmd_Optimale'].notna() & (df_ia['Date_Cmd_Optimale'] <= pd.Timestamp.now() + pd.Timedelta(days=90))].copy()
         if len(df_gantt) > 0:
             gantt_data = []
             for _, row in df_gantt.iterrows():
@@ -290,8 +254,8 @@ with tab4:
 with tab5:
     st.subheader("🎯 Simulateur What-If")
     c1, c2 = st.columns(2)
-    mp_sim = c1.selectbox("MP à simuler", df_result['Code_MP'].unique(), key="sim_mp")
-    qte_sim = c2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000, key="sim_qte")
+    mp_sim = c1.selectbox("MP à simuler", df_result['Code_MP'].unique())
+    qte_sim = c2.number_input("Quantité à commander (kg)", min_value=0, value=10000, step=1000)
     mp_data = df_result[df_result['Code_MP'] == mp_sim].iloc[0].copy()
     nouveau_stock = mp_data['Stock'] + qte_sim
     nouveau_ecart = nouveau_stock - (mp_data['Besoin_MRP'] + mp_data['Conso_30j'])
@@ -310,7 +274,6 @@ with tab5:
 
 with tab6:
     st.subheader("💬 Chat IA Pro")
-    st.caption("Swwl 3la: plan, prevision, risque, abc, fournisseur")
     if "messages" not in st.session_state:
         st.session_state.messages = []
     for msg in st.session_state.messages:
