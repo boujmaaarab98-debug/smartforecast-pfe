@@ -53,48 +53,109 @@ if not st.session_state.authenticated:
 # =========================
 # CSS
 # =========================
+# =========================
+# CSS KPI CARDS (بدّل القديم كامل بهادشي)
+# =========================
 st.markdown("""
 <style>
-.main {background-color:#f6f8fb;}
+
 .kpi-card{
-    background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%);
-    border-radius:18px;
-    padding:18px 16px;
-    box-shadow:0 8px 22px rgba(15,23,42,.08);
-    border:1px solid #e5e7eb;
-    border-top:5px solid #2563eb;
-    min-height:115px;
+    border-radius:20px;
+    padding:20px 18px;
+    min-height:120px;
+    box-shadow:0 10px 25px rgba(15,23,42,.12);
+    color:white;
+    overflow:hidden;
 }
 
 .kpi-title{
     font-size:13px;
     font-weight:600;
-    color:#64748b;
+    color:rgba(255,255,255,.88);
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
 
 .kpi-value{
-    font-size:30px;
-    font-weight:800;
-    color:#0f172a;
-    margin-top:18px;
+    font-size:32px;
+    font-weight:850;
+    color:white;
+    margin-top:20px;
     white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
 }
 
-.section-title{
-    font-size:30px;
-    font-weight:800;
-    color:#111827;
-    margin-bottom:6px;
-}
+</style>
+""", unsafe_allow_html=True)
 
-.section-subtitle{
-    font-size:15px;
-    color:#6b7280;
-    margin-bottom:20px;
-}
+
+# =========================
+# FUNCTION KPI CARD (بدّل القديمة كاملة)
+# =========================
+def kpi_card(title, value, bg):
+    st.markdown(f"""
+    <div class="kpi-card" style="background:{bg};">
+        <div class="kpi-title">{title}</div>
+        <div class="kpi-value">{value}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =========================
+# KPI BAR كاملة (بدّل bloc KPIs كامل)
+# =========================
+cov = round(
+    plan["couverture_j"]
+    .replace(999999, pd.NA)
+    .dropna()
+    .mean(),1
+)
+
+c1,c2,c3,c4,c5,c6 = st.columns(6)
+
+with c1:
+    kpi_card(
+        "Total MP",
+        int(len(plan)),
+        "linear-gradient(135deg,#2563eb,#1e3a8a)"
+    )
+
+with c2:
+    kpi_card(
+        "À commander",
+        int(plan["a_commander"].sum()),
+        "linear-gradient(135deg,#7c3aed,#581c87)"
+    )
+
+with c3:
+    kpi_card(
+        "Urgent/Critique",
+        int(plan["statut"].isin(["URGENT","CRITIQUE"]).sum()),
+        "linear-gradient(135deg,#dc2626,#991b1b)"
+    )
+
+with c4:
+    kpi_card(
+        "Qté commande kg",
+        f"{round(plan['qte_commande'].sum(),0):,.0f}",
+        "linear-gradient(135deg,#ea580c,#9a3412)"
+    )
+
+with c5:
+    kpi_card(
+        "Stock total kg",
+        f"{round(plan['stock_actuel'].sum(),0):,.0f}",
+        "linear-gradient(135deg,#0891b2,#155e75)"
+    )
+
+with c6:
+    kpi_card(
+        "Couverture j",
+        cov,
+        "linear-gradient(135deg,#16a34a,#166534)"
+    )
 </style>
 """, unsafe_allow_html=True)
 
