@@ -19,12 +19,12 @@ from data.google_sheets import load_all_data
 # ======================
 st.set_page_config(page_title="MRP Pro V5", page_icon="🏭", layout="wide")
 
+PASSWORD = "1234"
+
 
 # ======================
 # LOGIN
 # ======================
-PASSWORD = "1234"
-
 if "logged" not in st.session_state:
     st.session_state.logged = False
 
@@ -163,6 +163,7 @@ def prepare_param(param):
 
 def prepare_conso(conso):
     df = conso.copy()
+
     df = df.rename(
         columns={
             "Ref produit finis": "ref_produit_finis",
@@ -171,17 +172,16 @@ def prepare_conso(conso):
         }
     )
 
-    if (
-        "ref_produit_finis" not in df.columns
-        or "code_mp" not in df.columns
-        or "conso_unit" not in df.columns
-    ):
-        st.error("Vérifie les colonnes Conso: Ref produit finis / CODE matière / conso_unitaire")
-        st.stop()
+    required = ["ref_produit_finis", "code_mp", "conso_unit"]
+    for col in required:
+        if col not in df.columns:
+            st.error(f"Colonne manquante dans Conso : {col}")
+            st.stop()
 
     df["ref_produit_finis"] = df["ref_produit_finis"].astype(str).str.strip()
     df["code_mp"] = df["code_mp"].astype(str).str.strip()
     df["conso_unit"] = clean_numeric(df["conso_unit"]).fillna(0)
+
     return df[df["conso_unit"] > 0]
 
 
@@ -209,6 +209,7 @@ def prepare_mrp(mrp):
 
     df_long = df_long.dropna(subset=["date"])
     df_long = df_long[df_long["qte_pf"] > 0]
+
     return df_long
 
 
@@ -297,11 +298,10 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     df["conso_moy_jour_kg"] = df["besoin_periode_kg"] / nb_days
     df["stock_securite_kg"] = df["conso_moy_jour_kg"] * 3
 
-    df["couverture_j"] = df.apply(
-        lambda r: r["stock_actuel"] / r["conso_moy_jour_kg"]
-        if r["conso_moy_jour_kg"] > 0
-        else 999999,
-        axis=1,
+    df["couverture_j"] = 999999
+    mask_conso = df["conso_moy_jour_kg"] > 0
+    df.loc[mask_conso, "couverture_j"] = (
+        df.loc[mask_conso, "stock_actuel"] / df.loc[mask_conso, "conso_moy_jour_kg"]
     )
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
@@ -320,26 +320,17 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
     df["date_commande"] = df["date_besoin"] - pd.to_timedelta(df["lead_time_j"], unit="D")
 
-    today = pd.Timestamp.today().normalize()
+    def risk_label(r):
+        cov = r["couverture_j"]
 
-def risk_label(r):
-    cov = r["couverture_j"]
-
-    if r["qte_commande"] <= 0:
-        return "OK"
-
-    if cov <= 4:
-        return "URGENT"
-
-    elif cov <= 6:
-        return "CRITIQUE"
-
-    elif cov <= 12:
-        return "ATTENTION"
-
-    else:
-        return "OK"
-
+        if cov <= 4:
+            return "URGENT"
+        elif cov <= 6:
+            return "CRITIQUE"
+        elif cov <= 12:
+            return "ATTENTION"
+        else:
+            return "OK"
 
     df["statut"] = df.apply(risk_label, axis=1)
 
@@ -399,6 +390,7 @@ def to_pdf(plan, start_date, end_date):
             ]
         )
     )
+
     story.append(table)
     story.append(Spacer(1, 18))
 
@@ -406,6 +398,7 @@ def to_pdf(plan, start_date, end_date):
     data = [["MP", "Fournisseur", "Qté", "Date", "Statut"]] + top.astype(str).values.tolist()
 
     story.append(Paragraph("Top 10 actions prioritaires", styles["Heading2"]))
+
     table2 = Table(data)
     table2.setStyle(
         TableStyle(
@@ -417,15 +410,15 @@ def to_pdf(plan, start_date, end_date):
             ]
         )
     )
-    story.append(table2)
 
+    story.append(table2)
     doc.build(story)
     buffer.seek(0)
     return buffer
 
 
 # ======================
-# CHAT IA LOCAL
+# IA LOCAL
 # ======================
 def chat_ia_local(question, plan):
     q = question.lower().strip()
@@ -449,7 +442,7 @@ def chat_ia_local(question, plan):
         lines = ["### Risque stock"]
         for _, r in low.iterrows():
             lines.append(
-                f"- **{r['code_mp']}** : couverture **{round(r['couverture_j'], 1)} jours**, lead time **{r['lead_time_j']} jours**, statut **{r['statut']}**."
+                f"- **{r['code_mp']}** : couverture **{round(r['couverture_j'], 1)} jours**, statut **{r['statut']}**."
             )
         return "\n".join(lines)
 
@@ -463,7 +456,6 @@ def chat_ia_local(question, plan):
                     f"- Nombre MP : **{df_f['code_mp'].nunique()}**\n"
                     f"- Qté à commander : **{round(df_f['qte_commande'].sum(), 2)} kg**\n"
                     f"- MP critiques : **{int(df_f['statut'].isin(['URGENT', 'CRITIQUE']).sum())}**\n"
-                    f"- Action : prioriser les MP avec couverture faible."
                 )
         return "Écris le nom du fournisseur dans ta question."
 
@@ -478,16 +470,17 @@ def chat_ia_local(question, plan):
                     f"- Stock actuel : **{round(r['stock_actuel'], 2)} kg**\n"
                     f"- Besoin période : **{round(r['besoin_periode_kg'], 2)} kg**\n"
                     f"- Qté à commander : **{round(r['qte_commande'], 2)} kg**\n"
-                    f"- Couverture : **{round(r['couverture_j'], 1) if r['couverture_j'] != 999999 else 0} jours**\n"
+                    f"- Couverture : **{round(r['couverture_j'], 1)} jours**\n"
                     f"- PF liés : **{r['liste_pf']}**"
                 )
+
         return "Écris le code MP dans ta question. Exemple : analyse MP MP0005."
 
     return "Je peux t’aider sur : actions urgentes, fournisseur, stock/rupture, ou analyse MP."
 
 
 # ======================
-# MAIN UI
+# MAIN
 # ======================
 st.markdown('<div class="section-title">🏭 MRP Pro V5 - Dashboard Intelligent</div>', unsafe_allow_html=True)
 st.markdown(
@@ -511,9 +504,6 @@ fournisseurs = data["fournisseurs"]
 
 mrp_long = prepare_mrp(mrp)
 
-# ======================
-# SIDEBAR
-# ======================
 st.sidebar.header("Configuration période")
 
 date_min = mrp_long["date"].min().date()
@@ -540,12 +530,8 @@ mrp_period = mrp_long[
 ]
 
 plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
-plan = pd.DataFrame(plan)
 top_action = plan.head(10)
 
-# ======================
-# TABS ORDER
-# ======================
 tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
     [
         "🏠 Dashboard",
@@ -558,30 +544,14 @@ tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_i
     ]
 )
 
+status_colors = {"URGENT": "#dc2626", "CRITIQUE": "#f97316", "ATTENTION": "#facc15", "OK": "#16a34a"}
+
+
 # ======================
 # DASHBOARD
 # ======================
 with tab_dashboard:
-    if "couverture_j" not in plan.columns:
-        plan["couverture_j"] = 999999
-
-        if "stock_actuel" in plan.columns and "conso_moy_jour_kg" in plan.columns:
-            mask = plan["conso_moy_jour_kg"] > 0
-            plan.loc[mask, "couverture_j"] = (
-                plan.loc[mask, "stock_actuel"] / plan.loc[mask, "conso_moy_jour_kg"]
-            )
-
     cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
-
-    # Sécurité colonnes
-    for col in ["a_commander", "qte_commande", "stock_actuel", "statut"]:
-        if col not in plan.columns:
-            plan[col] = 0
-
-    if "statut" in plan.columns:
-        critiques_count = int(plan["statut"].astype(str).isin(["URGENT", "CRITIQUE"]).sum())
-    else:
-        critiques_count = 0
 
     r1c1, r1c2, r1c3 = st.columns(3)
 
@@ -590,7 +560,7 @@ with tab_dashboard:
     with r1c2:
         kpi_card("À commander", int(plan["a_commander"].sum()), "linear-gradient(135deg,#7c3aed,#581c87)")
     with r1c3:
-        kpi_card("Critiques", critiques_count, "linear-gradient(135deg,#dc2626,#991b1b)")
+        kpi_card("Critiques", int(plan["statut"].isin(["URGENT", "CRITIQUE"]).sum()), "linear-gradient(135deg,#dc2626,#991b1b)")
 
     r2c1, r2c2, r2c3 = st.columns(3)
 
@@ -600,8 +570,6 @@ with tab_dashboard:
         kpi_card("Stock kg", f"{round(plan['stock_actuel'].sum(), 0):,.0f}", "linear-gradient(135deg,#0891b2,#155e75)")
     with r2c3:
         kpi_card("Couverture j", cov, "linear-gradient(135deg,#16a34a,#166534)")
-
-    status_colors = {"URGENT": "#dc2626", "CRITIQUE": "#f97316", "ATTENTION": "#facc15", "OK": "#16a34a"}
 
     colA, colB = st.columns(2)
 
@@ -636,37 +604,29 @@ with tab_dashboard:
         hide_index=True,
     )
 
+
 # ======================
-# ALERTES & ACTIONS
+# ALERTES
 # ======================
 with tab_alertes:
     st.subheader("🚨 Alertes & Actions Recommandées")
 
-    alertes = plan[
-        (plan["statut"].isin(["URGENT", "CRITIQUE"])) |
-        (plan["qte_commande"] > 0)
-    ].copy()
-
-    commandes_urgentes = plan[plan["statut"] == "URGENT"].copy()
-    commandes_critiques = plan[plan["statut"] == "CRITIQUE"].copy()
-    commandes_a_lancer = plan[plan["qte_commande"] > 0].copy()
+    alertes = plan[(plan["statut"].isin(["URGENT", "CRITIQUE"])) | (plan["qte_commande"] > 0)].copy()
+    urgentes = plan[plan["statut"] == "URGENT"].copy()
+    critiques = plan[plan["statut"] == "CRITIQUE"].copy()
+    commandes = plan[plan["qte_commande"] > 0].copy()
 
     a1, a2, a3, a4 = st.columns(4)
-
     with a1:
         st.metric("Alertes totales", int(len(alertes)))
     with a2:
-        st.metric("Urgentes", int(len(commandes_urgentes)))
+        st.metric("Urgentes", int(len(urgentes)))
     with a3:
-        st.metric("Critiques", int(len(commandes_critiques)))
+        st.metric("Critiques", int(len(critiques)))
     with a4:
-        st.metric("Commandes à lancer", int(len(commandes_a_lancer)))
+        st.metric("Commandes à lancer", int(len(commandes)))
 
-    st.markdown("---")
-
-    st.subheader("🎯 Actions recommandées prioritaires")
-
-    actions = plan[plan["qte_commande"] > 0].copy()
+    actions = commandes.copy()
 
     def action_recommandee(row):
         if row["statut"] == "URGENT":
@@ -674,17 +634,13 @@ with tab_alertes:
         elif row["statut"] == "CRITIQUE":
             return "Lancer commande en priorité"
         elif row["statut"] == "ATTENTION":
-            return "Surveiller et préparer commande"
-        else:
-            return "Aucune action"
+            return "Préparer commande"
+        return "Aucune action"
 
     actions["action_recommandee"] = actions.apply(action_recommandee, axis=1)
+    actions = actions.sort_values(["status_order", "date_commande", "qte_commande"], ascending=[True, True, False])
 
-    actions = actions.sort_values(
-        ["status_order", "date_commande", "qte_commande"],
-        ascending=[True, True, False]
-    )
-
+    st.subheader("🎯 Actions recommandées")
     st.dataframe(
         actions[
             [
@@ -705,43 +661,7 @@ with tab_alertes:
         hide_index=True,
     )
 
-    st.markdown("---")
 
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.subheader("🔴 MP urgentes")
-        st.dataframe(
-            commandes_urgentes[
-                [
-                    "code_mp",
-                    "designation",
-                    "nom_fournisseur",
-                    "qte_commande",
-                    "date_commande",
-                    "statut",
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-
-    with c2:
-        st.subheader("🟠 MP critiques")
-        st.dataframe(
-            commandes_critiques[
-                [
-                    "code_mp",
-                    "designation",
-                    "nom_fournisseur",
-                    "qte_commande",
-                    "date_commande",
-                    "statut",
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
 # ======================
 # STOCK
 # ======================
@@ -749,7 +669,7 @@ with tab_stock:
     st.subheader("📊 Analyse Stock")
 
     stock_total = round(plan["stock_actuel"].sum(), 2)
-    stock_risque = int((plan["couverture_j"] < plan["lead_time_j"]).sum())
+    stock_risque = int((plan["couverture_j"] <= 12).sum())
     stock_ok = int((plan["statut"] == "OK").sum())
     stock_dormant = int((plan["besoin_periode_kg"] == 0).sum())
 
@@ -768,7 +688,7 @@ with tab_stock:
     with c1:
         st.subheader("📉 Couverture stock faible")
         low_cov = plan[plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
-        fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map={"URGENT": "#dc2626", "CRITIQUE": "#f97316", "ATTENTION": "#facc15", "OK": "#16a34a"})
+        fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map=status_colors)
         fig_cov.update_layout(height=360, template="plotly_white")
         st.plotly_chart(fig_cov, use_container_width=True)
 
@@ -785,6 +705,7 @@ with tab_stock:
         use_container_width=True,
         hide_index=True,
     )
+
 
 # ======================
 # MP
@@ -816,35 +737,20 @@ with tab_mp:
         hide_index=True,
     )
 
-# ======================
-# FOURNISSEURS
-# ======================
+
 # ======================
 # FOURNISSEURS
 # ======================
 with tab_fournisseurs:
-    st.subheader("🏭 Module Fournisseurs")
+    st.subheader("🏭 Fournisseurs")
 
     fournisseurs_valides = plan[plan["nom_fournisseur"].astype(str).str.strip() != "-"].copy()
 
-    # KPIs fournisseurs globaux
     nb_fournisseurs = fournisseurs_valides["nom_fournisseur"].nunique()
     total_commande_fourn = fournisseurs_valides["qte_commande"].sum()
-    fournisseurs_critiques = fournisseurs_valides[
-        fournisseurs_valides["statut"].isin(["URGENT", "CRITIQUE"])
-    ]["nom_fournisseur"].nunique()
-
-    lead_time_moy = (
-        fournisseurs_valides["lead_time_j"].mean()
-        if "lead_time_j" in fournisseurs_valides.columns and len(fournisseurs_valides) > 0
-        else 0
-    )
-
-    valeur_total_fourn = (
-        fournisseurs_valides["valeur_commande_eur"].sum()
-        if "valeur_commande_eur" in fournisseurs_valides.columns
-        else 0
-    )
+    fournisseurs_critiques = fournisseurs_valides[fournisseurs_valides["statut"].isin(["URGENT", "CRITIQUE"])]["nom_fournisseur"].nunique()
+    lead_time_moy = fournisseurs_valides["lead_time_j"].mean() if len(fournisseurs_valides) > 0 else 0
+    valeur_total_fourn = fournisseurs_valides["valeur_commande_eur"].sum() if "valeur_commande_eur" in fournisseurs_valides.columns else 0
 
     top_fournisseur_df = (
         fournisseurs_valides.groupby("nom_fournisseur", as_index=False)["qte_commande"]
@@ -852,11 +758,7 @@ with tab_fournisseurs:
         .sort_values("qte_commande", ascending=False)
     )
 
-    top_fournisseur = (
-        top_fournisseur_df.iloc[0]["nom_fournisseur"]
-        if len(top_fournisseur_df) > 0
-        else "-"
-    )
+    top_fournisseur = top_fournisseur_df.iloc[0]["nom_fournisseur"] if len(top_fournisseur_df) > 0 else "-"
 
     k1, k2, k3 = st.columns(3)
     with k1:
@@ -874,9 +776,6 @@ with tab_fournisseurs:
     with k6:
         st.metric("Valeur commande €", round(valeur_total_fourn, 2))
 
-    st.markdown("---")
-
-    # Graphiques fournisseurs
     c1, c2 = st.columns(2)
 
     with c1:
@@ -887,15 +786,7 @@ with tab_fournisseurs:
             .sort_values("qte_commande", ascending=False)
             .head(10)
         )
-
-        fig_cmd_fourn = px.bar(
-            df_cmd_fourn,
-            x="nom_fournisseur",
-            y="qte_commande",
-            color="qte_commande",
-            color_continuous_scale="Blues",
-            title="Top fournisseurs par quantité commandée"
-        )
+        fig_cmd_fourn = px.bar(df_cmd_fourn, x="nom_fournisseur", y="qte_commande", color="qte_commande", color_continuous_scale="Blues")
         fig_cmd_fourn.update_layout(height=380, template="plotly_white")
         st.plotly_chart(fig_cmd_fourn, use_container_width=True)
 
@@ -911,85 +802,25 @@ with tab_fournisseurs:
         )
 
         if len(df_risque_fourn) > 0:
-            fig_risque_fourn = px.bar(
-                df_risque_fourn,
-                x="nom_fournisseur",
-                y="nb_mp_critiques",
-                color="nb_mp_critiques",
-                color_continuous_scale="Reds",
-                title="Fournisseurs avec MP critiques"
-            )
+            fig_risque_fourn = px.bar(df_risque_fourn, x="nom_fournisseur", y="nb_mp_critiques", color="nb_mp_critiques", color_continuous_scale="Reds")
             fig_risque_fourn.update_layout(height=380, template="plotly_white")
             st.plotly_chart(fig_risque_fourn, use_container_width=True)
         else:
-            st.success("Aucun fournisseur critique sur la période.")
+            st.success("Aucun fournisseur critique.")
 
-    st.markdown("---")
-
-    # Analyse fournisseur sélectionné
-    st.subheader("🔍 Analyse par fournisseur")
-
-    fournisseurs_list = sorted(
-        [x for x in fournisseurs_valides["nom_fournisseur"].dropna().unique() if str(x).strip() not in ["", "-"]]
-    )
+    fournisseurs_list = sorted([x for x in fournisseurs_valides["nom_fournisseur"].dropna().unique() if str(x).strip() not in ["", "-"]])
 
     if fournisseurs_list:
         selected_fournisseur = st.selectbox("Choisir fournisseur", fournisseurs_list)
+        df_f = fournisseurs_valides[fournisseurs_valides["nom_fournisseur"] == selected_fournisseur].copy()
 
-        df_f = fournisseurs_valides[
-            fournisseurs_valides["nom_fournisseur"] == selected_fournisseur
-        ].copy()
-
-        f1, f2, f3, f4 = st.columns(4)
-        with f1:
-            st.metric("Nombre MP", int(df_f["code_mp"].nunique()))
-        with f2:
-            st.metric("Qté commande kg", round(df_f["qte_commande"].sum(), 2))
-        with f3:
-            st.metric("Besoin total kg", round(df_f["besoin_total_kg"].sum(), 2))
-        with f4:
-            st.metric(
-                "MP critiques",
-                int(df_f["statut"].isin(["URGENT", "CRITIQUE"]).sum())
-            )
-
-        f5, f6, f7 = st.columns(3)
-        with f5:
-            st.metric("Stock total kg", round(df_f["stock_actuel"].sum(), 2))
-        with f6:
-            st.metric(
-                "Couverture moyenne j",
-                round(df_f["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
-                if len(df_f) else 0
-            )
-        with f7:
-            st.metric(
-                "Valeur commande €",
-                round(df_f["valeur_commande_eur"].sum(), 2)
-                if "valeur_commande_eur" in df_f.columns else 0
-            )
-
-        st.subheader("📦 MP liées au fournisseur")
+        st.subheader("MP liées au fournisseur")
         st.dataframe(
-            df_f[
-                [
-                    "code_mp",
-                    "designation",
-                    "stock_actuel",
-                    "besoin_periode_kg",
-                    "qte_commande",
-                    "moq_kg",
-                    "couverture_j",
-                    "date_commande",
-                    "statut",
-                ]
-            ],
+            df_f[["code_mp", "designation", "stock_actuel", "besoin_periode_kg", "qte_commande", "moq_kg", "couverture_j", "date_commande", "statut"]],
             use_container_width=True,
             hide_index=True,
         )
 
-    else:
-        st.info("Aucun fournisseur disponible.")
 
 # ======================
 # PLAN COMMANDE
@@ -1041,11 +872,13 @@ with tab_plan:
             mime="application/pdf",
         )
 
+
 # ======================
 # IA
 # ======================
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
     question = st.text_input("Pose ta question")
+
     if st.button("Analyser"):
         st.markdown(chat_ia_local(question, plan))
