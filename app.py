@@ -277,8 +277,7 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
   df["qte_commande"] = df.apply(
     lambda r: 0 if r["manque"] <= 0 else math.ceil(r["manque"] / r["moq_kg"]) * r["moq_kg"],
-    axis=1
-)
+    axis=1)
     df["a_commander"] = df["qte_commande"] > 0
     df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
     df["date_commande"] = df["date_besoin"] - pd.to_timedelta(df["lead_time_j"], unit="D")
