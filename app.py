@@ -540,6 +540,7 @@ mrp_period = mrp_long[
 ]
 
 plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
+plan = pd.DataFrame(plan)
 top_action = plan.head(10)
 
 # ======================
