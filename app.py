@@ -322,8 +322,7 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     today = pd.Timestamp.today().normalize()
 
-    def risk_label(r):
-
+def risk_label(r):
     cov = r["couverture_j"]
 
     if r["qte_commande"] <= 0:
@@ -337,6 +336,9 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     elif cov <= 12:
         return "ATTENTION"
+
+    else:
+        return "OK"
 
     else:
         return "OK"
