@@ -579,7 +579,7 @@ r1c1, r1c2, r1c3 = st.columns(3)
     with r1c3:
         kpi_card("Critiques", int(plan["statut"].isin(["URGENT", "CRITIQUE"]).sum()), "linear-gradient(135deg,#dc2626,#991b1b)")
 
-    r2c1, r2c2, r2c3 = st.columns(3)
+r2c1, r2c2, r2c3 = st.columns(3)
 
     with r2c1:
         kpi_card("Commande kg", f"{round(plan['qte_commande'].sum(), 0):,.0f}", "linear-gradient(135deg,#ea580c,#9a3412)")
