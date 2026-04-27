@@ -65,8 +65,7 @@ st.markdown("""
     min-height:120px;
     box-shadow:0 10px 25px rgba(15,23,42,.12);
     color:white;
-    overflow:hidden;
-}
+    overflow:hidden;}
 
 .kpi-title{
     font-size:13px;
@@ -74,8 +73,7 @@ st.markdown("""
     color:rgba(255,255,255,.88);
     white-space:nowrap;
     overflow:hidden;
-    text-overflow:ellipsis;
-}
+    text-overflow:ellipsis;}
 
 .kpi-value{
     font-size:32px;
@@ -84,12 +82,10 @@ st.markdown("""
     margin-top:20px;
     white-space:nowrap;
     overflow:hidden;
-    text-overflow:ellipsis;
-}
+    text-overflow:ellipsis;}
 
 </style>
 """, unsafe_allow_html=True)
-
 
 # =========================
 # FUNCTION KPI CARD (بدّل القديمة كاملة)
