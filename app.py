@@ -9,6 +9,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from data.google_sheets import load_all_data
+import math
 
 st.set_page_config(page_title="MRP Pro V4", page_icon="🏭", layout="wide")
 
@@ -274,12 +275,19 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
-    df["qte_commande"] = df["manque"].apply(lambda x: max(x, 0))
+    def round_to_moq(row):
+    manque = row["manque"]
+    moq = row["moq_kg"]
 
-    df["qte_commande"] = df.apply(
-        lambda r: r["moq_kg"] if 0 < r["qte_commande"] < r["moq_kg"] else r["qte_commande"],
-        axis=1
-    )
+    if manque <= 0:
+        return 0
+
+    if moq <= 0:
+        return manque
+
+    return math.ceil(manque / moq) * moq
+
+df["qte_commande"] = df.apply(round_to_moq, axis=1)
 
     df["a_commander"] = df["qte_commande"] > 0
     df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
