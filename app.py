@@ -682,14 +682,126 @@ with tab_mp:
 # ======================
 # FOURNISSEURS
 # ======================
+# ======================
+# FOURNISSEURS
+# ======================
 with tab_fournisseurs:
-    st.subheader("🏭 Fournisseurs")
+    st.subheader("🏭 Module Fournisseurs")
 
-    fournisseurs_list = sorted([x for x in plan["nom_fournisseur"].dropna().unique() if str(x) not in ["", "-"]])
+    fournisseurs_valides = plan[plan["nom_fournisseur"].astype(str).str.strip() != "-"].copy()
+
+    # KPIs fournisseurs globaux
+    nb_fournisseurs = fournisseurs_valides["nom_fournisseur"].nunique()
+    total_commande_fourn = fournisseurs_valides["qte_commande"].sum()
+    fournisseurs_critiques = fournisseurs_valides[
+        fournisseurs_valides["statut"].isin(["URGENT", "CRITIQUE"])
+    ]["nom_fournisseur"].nunique()
+
+    lead_time_moy = (
+        fournisseurs_valides["lead_time_j"].mean()
+        if "lead_time_j" in fournisseurs_valides.columns and len(fournisseurs_valides) > 0
+        else 0
+    )
+
+    valeur_total_fourn = (
+        fournisseurs_valides["valeur_commande_eur"].sum()
+        if "valeur_commande_eur" in fournisseurs_valides.columns
+        else 0
+    )
+
+    top_fournisseur_df = (
+        fournisseurs_valides.groupby("nom_fournisseur", as_index=False)["qte_commande"]
+        .sum()
+        .sort_values("qte_commande", ascending=False)
+    )
+
+    top_fournisseur = (
+        top_fournisseur_df.iloc[0]["nom_fournisseur"]
+        if len(top_fournisseur_df) > 0
+        else "-"
+    )
+
+    k1, k2, k3 = st.columns(3)
+    with k1:
+        st.metric("Nombre fournisseurs", int(nb_fournisseurs))
+    with k2:
+        st.metric("Fournisseurs critiques", int(fournisseurs_critiques))
+    with k3:
+        st.metric("Top fournisseur", top_fournisseur)
+
+    k4, k5, k6 = st.columns(3)
+    with k4:
+        st.metric("Commande totale kg", round(total_commande_fourn, 2))
+    with k5:
+        st.metric("Lead time moyen", round(lead_time_moy, 1))
+    with k6:
+        st.metric("Valeur commande €", round(valeur_total_fourn, 2))
+
+    st.markdown("---")
+
+    # Graphiques fournisseurs
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("📊 Commande par fournisseur")
+        df_cmd_fourn = (
+            fournisseurs_valides.groupby("nom_fournisseur", as_index=False)["qte_commande"]
+            .sum()
+            .sort_values("qte_commande", ascending=False)
+            .head(10)
+        )
+
+        fig_cmd_fourn = px.bar(
+            df_cmd_fourn,
+            x="nom_fournisseur",
+            y="qte_commande",
+            color="qte_commande",
+            color_continuous_scale="Blues",
+            title="Top fournisseurs par quantité commandée"
+        )
+        fig_cmd_fourn.update_layout(height=380, template="plotly_white")
+        st.plotly_chart(fig_cmd_fourn, use_container_width=True)
+
+    with c2:
+        st.subheader("🚨 Risque par fournisseur")
+        df_risque_fourn = (
+            fournisseurs_valides[fournisseurs_valides["statut"].isin(["URGENT", "CRITIQUE"])]
+            .groupby("nom_fournisseur", as_index=False)["code_mp"]
+            .nunique()
+            .rename(columns={"code_mp": "nb_mp_critiques"})
+            .sort_values("nb_mp_critiques", ascending=False)
+            .head(10)
+        )
+
+        if len(df_risque_fourn) > 0:
+            fig_risque_fourn = px.bar(
+                df_risque_fourn,
+                x="nom_fournisseur",
+                y="nb_mp_critiques",
+                color="nb_mp_critiques",
+                color_continuous_scale="Reds",
+                title="Fournisseurs avec MP critiques"
+            )
+            fig_risque_fourn.update_layout(height=380, template="plotly_white")
+            st.plotly_chart(fig_risque_fourn, use_container_width=True)
+        else:
+            st.success("Aucun fournisseur critique sur la période.")
+
+    st.markdown("---")
+
+    # Analyse fournisseur sélectionné
+    st.subheader("🔍 Analyse par fournisseur")
+
+    fournisseurs_list = sorted(
+        [x for x in fournisseurs_valides["nom_fournisseur"].dropna().unique() if str(x).strip() not in ["", "-"]]
+    )
 
     if fournisseurs_list:
-        f = st.selectbox("Choisir fournisseur", fournisseurs_list)
-        df_f = plan[plan["nom_fournisseur"] == f]
+        selected_fournisseur = st.selectbox("Choisir fournisseur", fournisseurs_list)
+
+        df_f = fournisseurs_valides[
+            fournisseurs_valides["nom_fournisseur"] == selected_fournisseur
+        ].copy()
 
         f1, f2, f3, f4 = st.columns(4)
         with f1:
@@ -699,20 +811,46 @@ with tab_fournisseurs:
         with f3:
             st.metric("Besoin total kg", round(df_f["besoin_total_kg"].sum(), 2))
         with f4:
-            st.metric("MP critiques", int(df_f["statut"].isin(["URGENT", "CRITIQUE"]).sum()))
+            st.metric(
+                "MP critiques",
+                int(df_f["statut"].isin(["URGENT", "CRITIQUE"]).sum())
+            )
 
-        st.subheader("Top fournisseurs par quantité")
-        top_f = plan.groupby("nom_fournisseur", as_index=False)["qte_commande"].sum().sort_values("qte_commande", ascending=False).head(8)
-        fig_f = px.bar(top_f, x="nom_fournisseur", y="qte_commande", color="qte_commande", color_continuous_scale="Blues")
-        fig_f.update_layout(height=360, template="plotly_white")
-        st.plotly_chart(fig_f, use_container_width=True)
+        f5, f6, f7 = st.columns(3)
+        with f5:
+            st.metric("Stock total kg", round(df_f["stock_actuel"].sum(), 2))
+        with f6:
+            st.metric(
+                "Couverture moyenne j",
+                round(df_f["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
+                if len(df_f) else 0
+            )
+        with f7:
+            st.metric(
+                "Valeur commande €",
+                round(df_f["valeur_commande_eur"].sum(), 2)
+                if "valeur_commande_eur" in df_f.columns else 0
+            )
 
-        st.subheader("MP liés au fournisseur")
+        st.subheader("📦 MP liées au fournisseur")
         st.dataframe(
-            df_f[["code_mp", "designation", "stock_actuel", "besoin_periode_kg", "qte_commande", "couverture_j", "date_commande", "statut"]],
+            df_f[
+                [
+                    "code_mp",
+                    "designation",
+                    "stock_actuel",
+                    "besoin_periode_kg",
+                    "qte_commande",
+                    "moq_kg",
+                    "couverture_j",
+                    "date_commande",
+                    "statut",
+                ]
+            ],
             use_container_width=True,
             hide_index=True,
         )
+
     else:
         st.info("Aucun fournisseur disponible.")
 
