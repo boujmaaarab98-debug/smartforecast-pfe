@@ -340,8 +340,6 @@ def risk_label(r):
     else:
         return "OK"
 
-    else:
-        return "OK"
 
     df["statut"] = df.apply(risk_label, axis=1)
 
