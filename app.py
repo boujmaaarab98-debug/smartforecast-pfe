@@ -16,7 +16,7 @@ st.set_page_config(page_title="MRP Pro V4", page_icon="🏭", layout="wide")
 # ======================
 # LOGIN
 # ======================
-PASSWORD = "1234"
+PASSWORD = "arab1998"
 
 if "logged" not in st.session_state:
     st.session_state.logged = False
