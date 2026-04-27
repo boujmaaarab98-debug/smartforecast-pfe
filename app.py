@@ -431,10 +431,10 @@ def chat_ia_local(question, plan):
 ### Analyse MP : {mp}
 - Désignation : **{r['designation']}**
 - Fournisseur : **{r['nom_fournisseur']}**
-- Stock actuel : **{round(r['stock_actuel'],2)} kg**
-- Besoin période : **{round(r['besoin_periode_kg'],2)} kg**
-- Qté à commander : **{round(r['qte_commande'],2)} kg**
-- Couverture : **{round(r['couverture_j'],1) if r['couverture_j'] != 999999 else 0} jours**
+- Stock actuel : **{round(r['stock_actuel'], 2)} kg**
+- Besoin période : **{round(r['besoin_periode_kg'], 2)} kg**
+- Qté à commander : **{round(r['qte_commande'], 2)} kg**
+- Couverture : **{round(r['couverture_j'], 1) if r['couverture_j'] != 999999 else 0} jours**
 - PF liés : **{r['liste_pf']}**
 """
         return "Écris le code MP dans ta question, par exemple : *analyse MP MP0005*."
