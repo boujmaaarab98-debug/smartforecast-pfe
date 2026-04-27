@@ -14,7 +14,7 @@ st.set_page_config(
 # ==================================================
 # PASSWORD LOGIN
 # ==================================================
-PASSWORD = "1234"   # بدلها بالباسوورد لي بغيتي
+PASSWORD = "arab1998"   # بدلها بالباسوورد لي بغيتي
 
 if "logged" not in st.session_state:
     st.session_state.logged = False
