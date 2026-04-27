@@ -562,10 +562,7 @@ tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_i
 # DASHBOARD
 # ======================
 with tab_dashboard:
-    plan["couverture_j"] = plan.apply(
-        lambda r: r["stock_actuel"] / r["conso_moy_jour_kg"] if r["conso_moy_jour_kg"] > 0 else 999999,
-        axis=1
-    )
+    cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 
     cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 
