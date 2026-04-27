@@ -50,14 +50,12 @@ if not st.session_state.authenticated:
             st.error("Mot de passe incorrect.")
     st.stop()
 
-# =========================
-# CSS
-# =========================
-# =========================
-# CSS KPI CARDS (بدّل القديم كامل بهادشي)
-# =========================
 st.markdown("""
 <style>
+
+.main {
+    background-color:#f6f8fb;
+}
 
 .kpi-card{
     border-radius:20px;
@@ -65,7 +63,8 @@ st.markdown("""
     min-height:120px;
     box-shadow:0 10px 25px rgba(15,23,42,.12);
     color:white;
-    overflow:hidden;}
+    overflow:hidden;
+}
 
 .kpi-title{
     font-size:13px;
@@ -73,7 +72,8 @@ st.markdown("""
     color:rgba(255,255,255,.88);
     white-space:nowrap;
     overflow:hidden;
-    text-overflow:ellipsis;}
+    text-overflow:ellipsis;
+}
 
 .kpi-value{
     font-size:32px;
@@ -82,7 +82,21 @@ st.markdown("""
     margin-top:20px;
     white-space:nowrap;
     overflow:hidden;
-    text-overflow:ellipsis;}
+    text-overflow:ellipsis;
+}
+
+.section-title{
+    font-size:32px;
+    font-weight:800;
+    color:#111827;
+    margin-bottom:6px;
+}
+
+.section-subtitle{
+    font-size:15px;
+    color:#6b7280;
+    margin-bottom:20px;
+}
 
 </style>
 """, unsafe_allow_html=True)
