@@ -535,9 +535,10 @@ top_action = plan.head(10)
 # ======================
 # TABS ORDER
 # ======================
-tab_dashboard, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
+tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
     [
         "🏠 Dashboard",
+        "🚨 Alertes",
         "📊 Stock",
         "📦 Matières Premières",
         "🏭 Fournisseurs",
@@ -605,6 +606,112 @@ with tab_dashboard:
         hide_index=True,
     )
 
+# ======================
+# ALERTES & ACTIONS
+# ======================
+with tab_alertes:
+    st.subheader("🚨 Alertes & Actions Recommandées")
+
+    alertes = plan[
+        (plan["statut"].isin(["URGENT", "CRITIQUE"])) |
+        (plan["qte_commande"] > 0)
+    ].copy()
+
+    commandes_urgentes = plan[plan["statut"] == "URGENT"].copy()
+    commandes_critiques = plan[plan["statut"] == "CRITIQUE"].copy()
+    commandes_a_lancer = plan[plan["qte_commande"] > 0].copy()
+
+    a1, a2, a3, a4 = st.columns(4)
+
+    with a1:
+        st.metric("Alertes totales", int(len(alertes)))
+    with a2:
+        st.metric("Urgentes", int(len(commandes_urgentes)))
+    with a3:
+        st.metric("Critiques", int(len(commandes_critiques)))
+    with a4:
+        st.metric("Commandes à lancer", int(len(commandes_a_lancer)))
+
+    st.markdown("---")
+
+    st.subheader("🎯 Actions recommandées prioritaires")
+
+    actions = plan[plan["qte_commande"] > 0].copy()
+
+    def action_recommandee(row):
+        if row["statut"] == "URGENT":
+            return "Commander immédiatement"
+        elif row["statut"] == "CRITIQUE":
+            return "Lancer commande en priorité"
+        elif row["statut"] == "ATTENTION":
+            return "Surveiller et préparer commande"
+        else:
+            return "Aucune action"
+
+    actions["action_recommandee"] = actions.apply(action_recommandee, axis=1)
+
+    actions = actions.sort_values(
+        ["status_order", "date_commande", "qte_commande"],
+        ascending=[True, True, False]
+    )
+
+    st.dataframe(
+        actions[
+            [
+                "action_recommandee",
+                "code_mp",
+                "designation",
+                "nom_fournisseur",
+                "stock_actuel",
+                "besoin_total_kg",
+                "qte_commande",
+                "moq_kg",
+                "couverture_j",
+                "date_commande",
+                "statut",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.markdown("---")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("🔴 MP urgentes")
+        st.dataframe(
+            commandes_urgentes[
+                [
+                    "code_mp",
+                    "designation",
+                    "nom_fournisseur",
+                    "qte_commande",
+                    "date_commande",
+                    "statut",
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with c2:
+        st.subheader("🟠 MP critiques")
+        st.dataframe(
+            commandes_critiques[
+                [
+                    "code_mp",
+                    "designation",
+                    "nom_fournisseur",
+                    "qte_commande",
+                    "date_commande",
+                    "statut",
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 # ======================
 # STOCK
 # ======================
