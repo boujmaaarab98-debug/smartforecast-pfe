@@ -275,7 +275,7 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
-    def round_to_moq(row):
+   def round_to_moq(row):
     manque = row["manque"]
     moq = row["moq_kg"]
 
