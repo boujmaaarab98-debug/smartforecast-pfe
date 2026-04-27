@@ -323,13 +323,23 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     today = pd.Timestamp.today().normalize()
 
     def risk_label(r):
-        if r["qte_commande"] <= 0:
-            return "OK"
-        if pd.notna(r["date_commande"]) and pd.Timestamp(r["date_commande"]).normalize() <= today:
-            return "URGENT"
-        if r["couverture_j"] < r["lead_time_j"]:
-            return "CRITIQUE"
+
+    cov = r["couverture_j"]
+
+    if r["qte_commande"] <= 0:
+        return "OK"
+
+    if cov <= 4:
+        return "URGENT"
+
+    elif cov <= 6:
+        return "CRITIQUE"
+
+    elif cov <= 12:
         return "ATTENTION"
+
+    else:
+        return "OK"
 
     df["statut"] = df.apply(risk_label, axis=1)
 
