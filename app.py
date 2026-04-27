@@ -1,260 +1,651 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from data.google_sheets import load_all_data
 
-# ==================================================
-# CONFIG
-# ==================================================
-st.set_page_config(
-    page_title="MRP Pro V4",
-    page_icon="🏭",
-    layout="wide"
-)
+st.set_page_config(page_title="MRP Pro V4", page_icon="🏭", layout="wide")
 
-# ==================================================
-# PASSWORD LOGIN
-# ==================================================
-PASSWORD = "arab1998"   # بدلها بالباسوورد لي بغيتي
+# ======================
+# LOGIN
+# ======================
+PASSWORD = "1234"
 
 if "logged" not in st.session_state:
     st.session_state.logged = False
 
 if not st.session_state.logged:
-    st.markdown(
-        """
-        <h1 style='text-align:center;margin-top:80px;'>🏭 MRP PRO LOGIN</h1>
-        <p style='text-align:center;color:gray;'>Plateforme Approvisionnement Intelligente</p>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown("""
+    <div style="max-width:460px;margin:90px auto;padding:35px;background:white;border-radius:24px;
+    box-shadow:0 12px 30px rgba(15,23,42,.12);text-align:center;">
+        <h1>🏭 MRP Pro</h1>
+        <p style="color:#64748b;">Accès sécurisé entreprise</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     p = st.text_input("Mot de passe", type="password")
-
     if st.button("Connexion"):
         if p == PASSWORD:
             st.session_state.logged = True
             st.rerun()
         else:
             st.error("Mot de passe incorrect")
-
     st.stop()
 
-# ==================================================
-# GOOGLE SHEET
-# ==================================================
-SHEET_ID = "1DNmM76FfZRtucCMEB-If0t1EEV-lPRn70pl9yP2ooeM"
-
-def load_sheet(sheet):
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet}"
-    return pd.read_csv(url)
-
-@st.cache_data(ttl=60)
-def load_all():
-    return {
-        "param": load_sheet("Param"),
-        "conso": load_sheet("Conso"),
-        "fournisseurs": load_sheet("Fournisseurs"),
-        "mrp": load_sheet("MRP")
-    }
-
-# ==================================================
+# ======================
 # CSS
-# ==================================================
+# ======================
 st.markdown("""
 <style>
-.main {background:#f6f8fb;}
+.main {background-color:#f6f8fb;}
+
+.section-title{
+    font-size:36px;
+    font-weight:900;
+    color:#0f172a;
+    margin-bottom:4px;
+}
+
+.section-subtitle{
+    font-size:17px;
+    color:#64748b;
+    margin-bottom:26px;
+}
 
 .kpi-card{
-border-radius:22px;
-padding:22px;
-min-height:165px;
-color:white;
-box-shadow:0 12px 24px rgba(0,0,0,.10);
-margin-bottom:18px;
+    border-radius:24px;
+    padding:26px 28px;
+    min-height:155px;
+    color:white;
+    box-shadow:0 12px 28px rgba(15,23,42,.14);
+    overflow:hidden;
+    margin-bottom:18px;
 }
 
 .kpi-title{
-font-size:21px;
-font-weight:700;
-opacity:.95;
+    font-size:22px;
+    font-weight:700;
+    opacity:.95;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
 }
 
 .kpi-value{
-font-size:42px;
-font-weight:900;
-margin-top:25px;
-line-height:1.1;
-word-break:break-word;
+    font-size:42px;
+    font-weight:900;
+    margin-top:28px;
+    white-space:nowrap;
+    overflow:visible;
 }
 
-.block{
-background:white;
-padding:18px;
-border-radius:20px;
-box-shadow:0 8px 18px rgba(0,0,0,.06);
-margin-top:15px;
+div[data-testid="stDataFrame"]{
+    background:white;
+    border-radius:18px;
+    padding:8px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================================================
-# KPI CARD
-# ==================================================
-def card(title, value, color):
-    st.markdown(f"""
-    <div class='kpi-card' style='background:{color};'>
-        <div class='kpi-title'>{title}</div>
-        <div class='kpi-value'>{value}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ==================================================
-# DATA
-# ==================================================
-data = load_all()
-
-param = data["param"]
-conso = data["conso"]
-
-conso = conso.rename(columns={
-    "CODE matière":"code_mp",
-    "conso journaliere MP en KG":"conso_jour_kg"
-})
-
-resume = conso.groupby("code_mp", as_index=False)["conso_jour_kg"].sum()
-
-plan = param.merge(resume, on="code_mp", how="left")
-plan["conso_jour_kg"] = plan["conso_jour_kg"].fillna(0)
-
-plan["couverture_j"] = plan.apply(
-    lambda x: 999999 if x["conso_jour_kg"] == 0 else x["stock_actuel"] / x["conso_jour_kg"],
-    axis=1
-)
-
-plan["qte_commande"] = ((plan["conso_jour_kg"] * 30) - plan["stock_actuel"]).clip(lower=0)
-
-def statut(x):
-    if x <= 7:
-        return "URGENT"
-    elif x <= 15:
-        return "CRITIQUE"
-    else:
-        return "OK"
-
-plan["statut"] = plan["couverture_j"].apply(statut)
-
-# ==================================================
-# HEADER
-# ==================================================
-st.title("🏭 MRP Pro V4 - Dashboard Intelligent")
-st.caption("Approvisionnement • Stock • Fournisseurs • Pilotage temps réel")
-
-# ==================================================
-# KPI (3 فوق + 3 تحت)
-# ==================================================
-cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(),1)
-
-r1c1,r1c2,r1c3 = st.columns(3)
-
-with r1c1:
-    card("Total MP", len(plan), "linear-gradient(135deg,#2563eb,#1e3a8a)")
-with r1c2:
-    card("À commander", int((plan["qte_commande"]>0).sum()), "linear-gradient(135deg,#7c3aed,#581c87)")
-with r1c3:
-    card("Critiques", int(plan["statut"].isin(["URGENT","CRITIQUE"]).sum()), "linear-gradient(135deg,#dc2626,#991b1b)")
-
-r2c1,r2c2,r2c3 = st.columns(3)
-
-with r2c1:
-    card("Commande kg", f"{plan['qte_commande'].sum():,.0f}", "linear-gradient(135deg,#ea580c,#9a3412)")
-with r2c2:
-    card("Stock kg", f"{plan['stock_actuel'].sum():,.0f}", "linear-gradient(135deg,#0891b2,#155e75)")
-with r2c3:
-    card("Couverture j", cov, "linear-gradient(135deg,#16a34a,#166534)")
-
-# ==================================================
-# CHARTS
-# ==================================================
-c1,c2 = st.columns(2)
-
-with c1:
-    st.subheader("📊 Pareto commandes")
-
-    pareto = plan.sort_values("qte_commande", ascending=False)
-
-    fig = px.bar(
-        pareto,
-        x="code_mp",
-        y="qte_commande",
-        color="qte_commande",
-        color_continuous_scale="Blues"
+# ======================
+# HELPERS
+# ======================
+def clean_numeric(series):
+    return pd.to_numeric(
+        series.astype(str)
+        .str.replace(",", ".", regex=False)
+        .str.replace(" ", "", regex=False)
+        .str.replace(r"[^\d\.\-]", "", regex=True),
+        errors="coerce"
     )
-    fig.update_layout(height=420)
-    st.plotly_chart(fig, use_container_width=True)
 
-with c2:
-    st.subheader("🧭 Statuts")
+def normalize_columns(df):
+    df = df.copy()
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
 
-    stat = plan["statut"].value_counts().reset_index()
-    stat.columns = ["statut","nb"]
-
-    fig2 = px.pie(
-        stat,
-        names="statut",
-        values="nb",
-        color="statut",
-        color_discrete_map={
-            "URGENT":"#dc2626",
-            "CRITIQUE":"#f59e0b",
-            "OK":"#16a34a"
-        },
-        hole=0.45
+def kpi_card(title, value, bg):
+    st.markdown(
+        f"""
+        <div class="kpi-card" style="background:{bg};">
+            <div class="kpi-title">{title}</div>
+            <div class="kpi-value">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
-    fig2.update_layout(height=420)
-    st.plotly_chart(fig2, use_container_width=True)
 
-# ==================================================
-# TABLEAU
-# ==================================================
-st.subheader("📦 Plan Approvisionnement")
+@st.cache_data(ttl=60, show_spinner=False)
+def get_data():
+    data = load_all_data()
+    for k in data:
+        data[k] = normalize_columns(data[k])
+    return data
 
-show = plan[[
-    "code_mp",
-    "designation",
-    "stock_actuel",
-    "conso_jour_kg",
-    "couverture_j",
-    "qte_commande",
-    "statut"
-]]
+# ======================
+# PREPARE DATA
+# ======================
+def prepare_param(param):
+    df = param.copy()
+    df["code_mp"] = df["code_mp"].astype(str).str.strip()
+    df["designation"] = df["designation"].astype(str).str.strip()
+    df["lead_time_j"] = clean_numeric(df["lead_time_j"]).fillna(0)
+    df["moq_kg"] = clean_numeric(df["moq_kg"]).fillna(0)
+    df["stock_actuel"] = clean_numeric(df["stock_actuel"]).fillna(0)
+    return df
 
-st.dataframe(show, use_container_width=True, height=450)
+def prepare_conso(conso):
+    df = conso.copy()
+    df = df.rename(columns={
+        "Ref produit finis": "ref_produit_finis",
+        "CODE matière": "code_mp",
+        "conso_unitaire": "conso_unit"
+    })
 
-# ==================================================
-# IA CHAT SIMPLE
-# ==================================================
-st.subheader("🤖 Chat IA")
+    if "ref_produit_finis" not in df.columns or "code_mp" not in df.columns or "conso_unit" not in df.columns:
+        st.error("Vérifie les colonnes Conso: Ref produit finis / CODE matière / conso_unitaire")
+        st.stop()
 
-question = st.text_input("Pose une question")
+    df["ref_produit_finis"] = df["ref_produit_finis"].astype(str).str.strip()
+    df["code_mp"] = df["code_mp"].astype(str).str.strip()
+    df["conso_unit"] = clean_numeric(df["conso_unit"]).fillna(0)
+    return df[df["conso_unit"] > 0]
 
-if question:
-    q = question.lower()
+def prepare_mrp(mrp):
+    df = mrp.copy()
+    product_col = "Ref produit finis"
 
-    if "urgent" in q:
-        st.write(plan[plan["statut"]=="URGENT"][["code_mp","qte_commande"]])
+    if product_col not in df.columns:
+        st.error("La colonne 'Ref produit finis' est introuvable dans MRP.")
+        st.stop()
 
-    elif "stock" in q:
-        st.success(f"Stock total = {plan['stock_actuel'].sum():,.0f} kg")
+    date_cols = [c for c in df.columns if c != product_col]
 
-    elif "commande" in q:
-        st.success(f"Commande totale = {plan['qte_commande'].sum():,.0f} kg")
+    df_long = df.melt(
+        id_vars=[product_col],
+        value_vars=date_cols,
+        var_name="date",
+        value_name="qte_pf"
+    )
 
+    df_long = df_long.rename(columns={product_col: "ref_produit_finis"})
+    df_long["ref_produit_finis"] = df_long["ref_produit_finis"].astype(str).str.strip()
+    df_long["date"] = pd.to_datetime(df_long["date"], dayfirst=True, errors="coerce")
+    df_long["qte_pf"] = clean_numeric(df_long["qte_pf"]).fillna(0)
+
+    df_long = df_long.dropna(subset=["date"])
+    df_long = df_long[df_long["qte_pf"] > 0]
+    return df_long
+
+def prepare_fournisseurs(fournisseurs):
+    df = fournisseurs.copy()
+
+    if "code_mp" not in df.columns:
+        return pd.DataFrame(columns=["code_mp", "nom_fournisseur"])
+
+    df["code_mp"] = df["code_mp"].astype(str).str.strip()
+
+    if "nom_fournisseur" in df.columns:
+        df["nom_fournisseur"] = df["nom_fournisseur"].astype(str).str.strip()
     else:
-        st.info("Essaye: urgent / stock / commande")
+        df["nom_fournisseur"] = "-"
 
-# ==================================================
-# REFRESH
-# ==================================================
-if st.button("🔄 Actualiser"):
+    for col in ["fiabilite_%", "taux_service_%", "note_qualite_5", "lead_time_j", "prix_unitaire_eur"]:
+        if col in df.columns:
+            df[col] = clean_numeric(df[col])
+
+    sort_cols = []
+    ascending = []
+
+    if "fiabilite_%" in df.columns:
+        sort_cols.append("fiabilite_%")
+        ascending.append(False)
+
+    if "lead_time_j" in df.columns:
+        sort_cols.append("lead_time_j")
+        ascending.append(True)
+
+    if sort_cols:
+        df = df.sort_values(sort_cols, ascending=ascending)
+
+    best = df.groupby("code_mp", as_index=False).first()
+
+    keep = ["code_mp", "nom_fournisseur"]
+    for col in ["fiabilite_%", "taux_service_%", "note_qualite_5", "prix_unitaire_eur", "localisation"]:
+        if col in best.columns:
+            keep.append(col)
+
+    return best[keep]
+
+# ======================
+# BUSINESS LOGIC
+# ======================
+def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date):
+    param_df = prepare_param(param)
+    conso_df = prepare_conso(conso)
+    fournisseurs_df = prepare_fournisseurs(fournisseurs)
+
+    df_need = mrp_period.merge(conso_df, on="ref_produit_finis", how="left")
+    df_need = df_need.dropna(subset=["code_mp"])
+    df_need["besoin_mp_kg"] = df_need["qte_pf"] * df_need["conso_unit"]
+
+    besoin_mp = (
+        df_need.groupby("code_mp", as_index=False)["besoin_mp_kg"]
+        .sum()
+        .rename(columns={"besoin_mp_kg": "besoin_periode_kg"})
+    )
+
+    date_besoin_mp = (
+        df_need.groupby("code_mp", as_index=False)["date"]
+        .min()
+        .rename(columns={"date": "date_besoin"})
+    )
+
+    pf_mp = (
+        df_need.groupby("code_mp", as_index=False)["ref_produit_finis"]
+        .agg(lambda x: ", ".join(sorted(set(map(str, x)))))
+        .rename(columns={"ref_produit_finis": "liste_pf"})
+    )
+
+    df = param_df.merge(besoin_mp, on="code_mp", how="left")
+    df = df.merge(date_besoin_mp, on="code_mp", how="left")
+    df = df.merge(pf_mp, on="code_mp", how="left")
+    df = df.merge(fournisseurs_df, on="code_mp", how="left")
+
+    df["besoin_periode_kg"] = df["besoin_periode_kg"].fillna(0)
+    df["liste_pf"] = df["liste_pf"].fillna("")
+    df["nom_fournisseur"] = df["nom_fournisseur"].fillna("-")
+
+    nb_days = max((pd.to_datetime(end_date) - pd.to_datetime(start_date)).days + 1, 1)
+
+    df["conso_moy_jour_kg"] = df["besoin_periode_kg"] / nb_days
+    df["stock_securite_kg"] = df["conso_moy_jour_kg"] * 3
+
+    df["couverture_j"] = df.apply(
+        lambda r: r["stock_actuel"] / r["conso_moy_jour_kg"] if r["conso_moy_jour_kg"] > 0 else 999999,
+        axis=1
+    )
+
+    df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
+    df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
+    df["qte_commande"] = df["manque"].apply(lambda x: max(x, 0))
+
+    df["qte_commande"] = df.apply(
+        lambda r: r["moq_kg"] if 0 < r["qte_commande"] < r["moq_kg"] else r["qte_commande"],
+        axis=1
+    )
+
+    df["a_commander"] = df["qte_commande"] > 0
+    df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
+    df["date_commande"] = df["date_besoin"] - pd.to_timedelta(df["lead_time_j"], unit="D")
+
+    today = pd.Timestamp.today().normalize()
+
+    def risk_label(r):
+        if r["qte_commande"] <= 0:
+            return "OK"
+        if pd.notna(r["date_commande"]) and pd.Timestamp(r["date_commande"]).normalize() <= today:
+            return "URGENT"
+        if r["couverture_j"] < r["lead_time_j"]:
+            return "CRITIQUE"
+        return "ATTENTION"
+
+    df["statut"] = df.apply(risk_label, axis=1)
+
+    if "prix_unitaire_eur" in df.columns:
+        df["valeur_commande_eur"] = (df["qte_commande"] * df["prix_unitaire_eur"]).fillna(0)
+    else:
+        df["valeur_commande_eur"] = 0
+
+    df["date_besoin"] = df["date_besoin"].dt.date
+    df["date_commande"] = pd.to_datetime(df["date_commande"], errors="coerce").dt.date
+
+    status_order = {"URGENT": 0, "CRITIQUE": 1, "ATTENTION": 2, "OK": 3}
+    df["status_order"] = df["statut"].map(status_order).fillna(9)
+
+    return df.sort_values(["status_order", "qte_commande"], ascending=[True, False]).reset_index(drop=True)
+
+# ======================
+# EXPORTS
+# ======================
+def to_excel(plan, top_action):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        plan.to_excel(writer, index=False, sheet_name="Plan_Detaille")
+        top_action.to_excel(writer, index=False, sheet_name="Top_Actions")
+    output.seek(0)
+    return output
+
+def to_pdf(plan, start_date, end_date):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Résumé Plan Approvisionnement - MRP Pro", styles["Title"]))
+    story.append(Paragraph(f"Période analysée : {start_date} au {end_date}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    kpis = [
+        ["Indicateur", "Valeur"],
+        ["Total MP", str(len(plan))],
+        ["MP à commander", str(int(plan["a_commander"].sum()))],
+        ["Urgents/Critiques", str(int(plan["statut"].isin(["URGENT", "CRITIQUE"]).sum()))],
+        ["Quantité commande kg", str(round(plan["qte_commande"].sum(), 2))],
+        ["Stock total kg", str(round(plan["stock_actuel"].sum(), 2))]
+    ]
+
+    table = Table(kpis)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563eb")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 18))
+
+    top = plan.head(10)[["code_mp", "nom_fournisseur", "qte_commande", "date_commande", "statut"]]
+    data = [["MP", "Fournisseur", "Qté", "Date", "Statut"]] + top.astype(str).values.tolist()
+
+    story.append(Paragraph("Top 10 actions prioritaires", styles["Heading2"]))
+    table2 = Table(data)
+    table2.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(table2)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+# ======================
+# CHAT IA LOCAL
+# ======================
+def chat_ia_local(question, plan):
+    q = question.lower().strip()
+
+    if q == "":
+        return "Pose une question : actions urgentes, stock, fournisseur, ou analyse MP MP0005."
+
+    top = plan.sort_values(["status_order", "qte_commande"], ascending=[True, False]).head(5)
+
+    if "action" in q or "urgent" in q or "شنو" in q or "اليوم" in q:
+        lines = ["### Actions prioritaires"]
+        for _, r in top.iterrows():
+            if r["qte_commande"] > 0:
+                lines.append(f"- **{r['code_mp']}** : commander **{round(r['qte_commande'], 2)} kg** chez **{r['nom_fournisseur']}** avant **{r['date_commande']}**.")
+        return "\n".join(lines)
+
+    if "stock" in q or "rupture" in q:
+        low = plan[plan["couverture_j"] != 999999].sort_values("couverture_j").head(5)
+        lines = ["### Risque stock"]
+        for _, r in low.iterrows():
+            lines.append(f"- **{r['code_mp']}** : couverture **{round(r['couverture_j'], 1)} jours**, lead time **{r['lead_time_j']} jours**, statut **{r['statut']}**.")
+        return "\n".join(lines)
+
+    if "fournisseur" in q or "supplier" in q:
+        fournisseurs = [x for x in plan["nom_fournisseur"].dropna().unique() if str(x) != "-"]
+        for f in fournisseurs:
+            if str(f).lower() in q:
+                df_f = plan[plan["nom_fournisseur"] == f]
+                return (
+                    f"### Analyse fournisseur : {f}\n"
+                    f"- Nombre MP : **{df_f['code_mp'].nunique()}**\n"
+                    f"- Qté à commander : **{round(df_f['qte_commande'].sum(), 2)} kg**\n"
+                    f"- MP critiques : **{int(df_f['statut'].isin(['URGENT', 'CRITIQUE']).sum())}**\n"
+                    f"- Action : prioriser les MP avec couverture faible."
+                )
+        return "Écris le nom du fournisseur dans ta question."
+
+    if "mp" in q:
+        for mp in plan["code_mp"].astype(str).unique():
+            if mp.lower() in q:
+                r = plan[plan["code_mp"].astype(str) == mp].iloc[0]
+                return (
+                    f"### Analyse MP : {mp}\n"
+                    f"- Désignation : **{r['designation']}**\n"
+                    f"- Fournisseur : **{r['nom_fournisseur']}**\n"
+                    f"- Stock actuel : **{round(r['stock_actuel'], 2)} kg**\n"
+                    f"- Besoin période : **{round(r['besoin_periode_kg'], 2)} kg**\n"
+                    f"- Qté à commander : **{round(r['qte_commande'], 2)} kg**\n"
+                    f"- Couverture : **{round(r['couverture_j'], 1) if r['couverture_j'] != 999999 else 0} jours**\n"
+                    f"- PF liés : **{r['liste_pf']}**"
+                )
+        return "Écris le code MP dans ta question. Exemple : analyse MP MP0005."
+
+    return "Je peux t’aider sur : actions urgentes, fournisseur, stock/rupture, ou analyse MP."
+
+# ======================
+# MAIN UI
+# ======================
+st.markdown('<div class="section-title">🏭 MRP Pro V4 - Dashboard Intelligent</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-subtitle">Approvisionnement, fournisseurs, stock, actions prioritaires et assistant IA.</div>', unsafe_allow_html=True)
+
+if st.sidebar.button("🔄 Actualiser maintenant"):
     st.cache_data.clear()
     st.rerun()
+
+if st.sidebar.button("🚪 Déconnexion"):
+    st.session_state.logged = False
+    st.rerun()
+
+data = get_data()
+param = data["param"]
+conso = data["conso"]
+mrp = data["mrp"]
+fournisseurs = data["fournisseurs"]
+
+mrp_long = prepare_mrp(mrp)
+
+# ======================
+# SIDEBAR
+# ======================
+st.sidebar.header("Configuration période")
+
+date_min = mrp_long["date"].min().date()
+date_max = mrp_long["date"].max().date()
+
+mode = st.sidebar.selectbox("Mode période", ["Durée prédéfinie", "Intervalle manuel"])
+
+if mode == "Durée prédéfinie":
+    duree = st.sidebar.selectbox("Durée", ["14 jours", "30 jours", "60 jours", "90 jours"])
+    nb_days = {"14 jours": 14, "30 jours": 30, "60 jours": 60, "90 jours": 90}[duree]
+    start_date = st.sidebar.date_input("Date début", value=date_min, min_value=date_min, max_value=date_max)
+    end_date = min(pd.to_datetime(start_date) + pd.Timedelta(days=nb_days - 1), pd.to_datetime(date_max)).date()
+else:
+    start_date = st.sidebar.date_input("Date début", value=date_min, min_value=date_min, max_value=date_max)
+    end_date = st.sidebar.date_input("Date fin", value=date_max, min_value=date_min, max_value=date_max)
+
+if pd.to_datetime(end_date) < pd.to_datetime(start_date):
+    st.error("La date fin doit être supérieure ou égale à la date début.")
+    st.stop()
+
+mrp_period = mrp_long[
+    (mrp_long["date"] >= pd.to_datetime(start_date)) &
+    (mrp_long["date"] <= pd.to_datetime(end_date))
+]
+
+plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
+
+# ======================
+# KPI BAR 3 + 3
+# ======================
+cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
+
+r1c1, r1c2, r1c3 = st.columns(3)
+
+with r1c1:
+    kpi_card("Total MP", int(len(plan)), "linear-gradient(135deg,#2563eb,#1e3a8a)")
+with r1c2:
+    kpi_card("À commander", int(plan["a_commander"].sum()), "linear-gradient(135deg,#7c3aed,#581c87)")
+with r1c3:
+    kpi_card("Critiques", int(plan["statut"].isin(["URGENT", "CRITIQUE"]).sum()), "linear-gradient(135deg,#dc2626,#991b1b)")
+
+r2c1, r2c2, r2c3 = st.columns(3)
+
+with r2c1:
+    kpi_card("Commande kg", f"{round(plan['qte_commande'].sum(), 0):,.0f}", "linear-gradient(135deg,#ea580c,#9a3412)")
+with r2c2:
+    kpi_card("Stock kg", f"{round(plan['stock_actuel'].sum(), 0):,.0f}", "linear-gradient(135deg,#0891b2,#155e75)")
+with r2c3:
+    kpi_card("Couverture j", cov, "linear-gradient(135deg,#16a34a,#166534)")
+
+st.markdown("##")
+
+# ======================
+# CHARTS
+# ======================
+status_colors = {"URGENT": "#dc2626", "CRITIQUE": "#f97316", "ATTENTION": "#facc15", "OK": "#16a34a"}
+
+colA, colB = st.columns(2)
+
+with colA:
+    st.subheader("📊 Pareto cumulative MP")
+    pareto = plan[plan["qte_commande"] > 0][["code_mp", "qte_commande"]].sort_values("qte_commande", ascending=False).head(10)
+
+    if not pareto.empty:
+        pareto["cum_pct"] = pareto["qte_commande"].cumsum() / pareto["qte_commande"].sum() * 100
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(go.Bar(x=pareto["code_mp"], y=pareto["qte_commande"], name="Qté commande", marker_color="#2563eb"), secondary_y=False)
+        fig.add_trace(go.Scatter(x=pareto["code_mp"], y=pareto["cum_pct"], name="% cumulé", mode="lines+markers", line=dict(color="#dc2626", width=3)), secondary_y=True)
+        fig.update_yaxes(title_text="Qté commande", secondary_y=False)
+        fig.update_yaxes(title_text="% cumulé", secondary_y=True, range=[0, 110])
+        fig.update_layout(height=380, template="plotly_white")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Aucune MP à commander.")
+
+with colB:
+    st.subheader("🧭 Répartition statuts")
+    status_df = plan["statut"].value_counts().reset_index()
+    status_df.columns = ["statut", "count"]
+    fig_status = px.pie(status_df, names="statut", values="count", hole=0.55, color="statut", color_discrete_map=status_colors)
+    fig_status.update_layout(height=380, template="plotly_white")
+    st.plotly_chart(fig_status, use_container_width=True)
+
+colC, colD = st.columns(2)
+
+with colC:
+    st.subheader("🏭 Top fournisseurs")
+    top_f = plan.groupby("nom_fournisseur", as_index=False)["qte_commande"].sum().sort_values("qte_commande", ascending=False).head(8)
+    fig_f = px.bar(top_f, x="nom_fournisseur", y="qte_commande", color="qte_commande", color_continuous_scale="Blues")
+    fig_f.update_layout(height=360, template="plotly_white")
+    st.plotly_chart(fig_f, use_container_width=True)
+
+with colD:
+    st.subheader("📉 Couverture stock faible")
+    low_cov = plan[plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
+    fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map=status_colors)
+    fig_cov.update_layout(height=360, template="plotly_white")
+    st.plotly_chart(fig_cov, use_container_width=True)
+
+# ======================
+# TOP ACTIONS
+# ======================
+st.subheader("🎯 Top actions prioritaires")
+
+top_action = plan.head(10)
+st.dataframe(
+    top_action[["code_mp", "designation", "nom_fournisseur", "stock_actuel", "qte_commande", "couverture_j", "date_commande", "statut"]],
+    use_container_width=True,
+    hide_index=True
+)
+
+# ======================
+# EXPORTS
+# ======================
+excel_file = to_excel(plan, top_action)
+pdf_file = to_pdf(plan, start_date, end_date)
+
+d1, d2 = st.columns(2)
+
+with d1:
+    st.download_button(
+        "📥 Export Excel",
+        data=excel_file,
+        file_name="plan_appro_mrp.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+with d2:
+    st.download_button(
+        "📄 Télécharger PDF résumé",
+        data=pdf_file,
+        file_name="resume_plan_appro.pdf",
+        mime="application/pdf"
+    )
+
+# ======================
+# TABS
+# ======================
+tab1, tab2, tab3, tab4 = st.tabs(["🏭 Fournisseurs", "🧱 Matières Premières", "📋 Plan détaillé", "🤖 Chat IA"])
+
+with tab1:
+    st.subheader("🏭 Vue Fournisseurs")
+    fournisseurs_list = sorted([x for x in plan["nom_fournisseur"].dropna().unique() if str(x) not in ["", "-"]])
+
+    if fournisseurs_list:
+        f = st.selectbox("Choisir fournisseur", fournisseurs_list)
+        df_f = plan[plan["nom_fournisseur"] == f]
+
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Nombre MP", int(df_f["code_mp"].nunique()))
+        with m2:
+            st.metric("Qté commande", round(df_f["qte_commande"].sum(), 2))
+        with m3:
+            st.metric("MP critiques", int(df_f["statut"].isin(["URGENT", "CRITIQUE"]).sum()))
+
+        st.dataframe(
+            df_f[["code_mp", "designation", "stock_actuel", "besoin_periode_kg", "qte_commande", "couverture_j", "statut"]],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Aucun fournisseur disponible.")
+
+with tab2:
+    st.subheader("🧱 Vue Matières Premières")
+    mp = st.selectbox("Choisir MP", sorted(plan["code_mp"].astype(str).unique()))
+    r = plan[plan["code_mp"].astype(str) == mp].iloc[0]
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Stock actuel", round(r["stock_actuel"], 2))
+    with m2:
+        st.metric("Besoin période", round(r["besoin_periode_kg"], 2))
+    with m3:
+        st.metric("Qté commande", round(r["qte_commande"], 2))
+    with m4:
+        st.metric("Couverture", round(r["couverture_j"], 2) if r["couverture_j"] != 999999 else 0)
+
+    st.write("**Fournisseur :**", r["nom_fournisseur"])
+    st.write("**Désignation :**", r["designation"])
+    st.write("**PF liés :**", r["liste_pf"])
+
+with tab3:
+    st.subheader("📋 Plan détaillé")
+    selected_status = st.selectbox("Statut", ["Tout", "URGENT", "CRITIQUE", "ATTENTION", "OK"])
+
+    if selected_status == "Tout":
+        df_show = plan.copy()
+    else:
+        df_show = plan[plan["statut"] == selected_status].copy()
+
+    st.dataframe(df_show, use_container_width=True, hide_index=True)
+
+with tab4:
+    st.subheader("🤖 Assistant IA - Actions Approvisionnement")
+    question = st.text_input("Pose ta question")
+    if st.button("Analyser"):
+        st.markdown(chat_ia_local(question, plan))
