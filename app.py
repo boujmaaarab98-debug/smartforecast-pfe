@@ -573,6 +573,16 @@ with tab_dashboard:
 
     cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 
+    # Sécurité colonnes
+    for col in ["a_commander", "qte_commande", "stock_actuel", "statut"]:
+        if col not in plan.columns:
+            plan[col] = 0
+
+    if "statut" in plan.columns:
+        critiques_count = int(plan["statut"].astype(str).isin(["URGENT", "CRITIQUE"]).sum())
+    else:
+        critiques_count = 0
+
     r1c1, r1c2, r1c3 = st.columns(3)
 
     with r1c1:
@@ -580,7 +590,7 @@ with tab_dashboard:
     with r1c2:
         kpi_card("À commander", int(plan["a_commander"].sum()), "linear-gradient(135deg,#7c3aed,#581c87)")
     with r1c3:
-        kpi_card("Critiques", int(plan["statut"].isin(["URGENT", "CRITIQUE"]).sum()), "linear-gradient(135deg,#dc2626,#991b1b)")
+        kpi_card("Critiques", critiques_count, "linear-gradient(135deg,#dc2626,#991b1b)")
 
     r2c1, r2c2, r2c3 = st.columns(3)
 
