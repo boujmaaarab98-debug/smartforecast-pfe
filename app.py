@@ -563,10 +563,13 @@ tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_i
 # ======================
 with tab_dashboard:
     if "couverture_j" not in plan.columns:
-        plan["couverture_j"] = plan.apply(
-            lambda r: r["stock_actuel"] / r["conso_moy_jour_kg"] if r["conso_moy_jour_kg"] > 0 else 999999,
-            axis=1
-        )
+        plan["couverture_j"] = 999999
+
+        if "stock_actuel" in plan.columns and "conso_moy_jour_kg" in plan.columns:
+            mask = plan["conso_moy_jour_kg"] > 0
+            plan.loc[mask, "couverture_j"] = (
+                plan.loc[mask, "stock_actuel"] / plan.loc[mask, "conso_moy_jour_kg"]
+            )
 
     cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 
