@@ -56,15 +56,45 @@ if not st.session_state.authenticated:
 st.markdown("""
 <style>
 .main {background-color:#f6f8fb;}
-.kpi-card {
-    background:white; border-radius:18px; padding:18px 20px;
-    box-shadow:0 4px 14px rgba(0,0,0,0.06);
-    border-left:6px solid #2563eb; min-height:120px;
+.kpi-card{
+    background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%);
+    border-radius:18px;
+    padding:18px 16px;
+    box-shadow:0 8px 22px rgba(15,23,42,.08);
+    border:1px solid #e5e7eb;
+    border-top:5px solid #2563eb;
+    min-height:115px;
 }
-.kpi-title {font-size:14px;color:#6b7280;}
-.kpi-value {font-size:26px;font-weight:800;color:#111827;margin-top:12px;}
-.section-title {font-size:28px;font-weight:800;color:#111827;margin-bottom:4px;}
-.section-subtitle {font-size:14px;color:#6b7280;margin-bottom:18px;}
+
+.kpi-title{
+    font-size:13px;
+    font-weight:600;
+    color:#64748b;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.kpi-value{
+    font-size:30px;
+    font-weight:800;
+    color:#0f172a;
+    margin-top:18px;
+    white-space:nowrap;
+}
+
+.section-title{
+    font-size:30px;
+    font-weight:800;
+    color:#111827;
+    margin-bottom:6px;
+}
+
+.section-subtitle{
+    font-size:15px;
+    color:#6b7280;
+    margin-bottom:20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
