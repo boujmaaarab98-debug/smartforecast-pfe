@@ -570,7 +570,7 @@ with tab_dashboard:
 cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 cov = round(plan["couverture_j"].replace(999999, pd.NA).dropna().mean(), 1)
 
-    r1c1, r1c2, r1c3 = st.columns(3)
+r1c1, r1c2, r1c3 = st.columns(3)
 
     with r1c1:
         kpi_card("Total MP", int(len(plan)), "linear-gradient(135deg,#2563eb,#1e3a8a)")
