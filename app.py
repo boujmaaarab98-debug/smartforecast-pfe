@@ -275,10 +275,19 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
-   df["qte_commande"] = df.apply(
-    lambda r: 0 if r["manque"] <= 0 else math.ceil(r["manque"]/r["moq_kg"]) * r["moq_kg"],
-    axis=1
-)
+  def round_to_moq(row):
+    manque = row["manque"]
+    moq = row["moq_kg"]
+
+    if manque <= 0:
+        return 0
+
+    if moq <= 0:
+        return manque
+
+    return math.ceil(manque / moq) * moq
+
+df["qte_commande"] = df.apply(round_to_moq, axis=1)
     df["a_commander"] = df["qte_commande"] > 0
     df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
     df["date_commande"] = df["date_besoin"] - pd.to_timedelta(df["lead_time_j"], unit="D")
