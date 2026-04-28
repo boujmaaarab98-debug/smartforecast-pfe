@@ -881,7 +881,6 @@ with tab_plan:
 # FORECAST IA
 # =========================
 with tab_forecast:
-
     st.subheader("🔮 Prévisions intelligentes")
 
     if forecast.empty:
@@ -897,6 +896,9 @@ with tab_forecast:
 
         with c3:
             st.metric("Forecast total 30j", int(forecast["forecast_30j"].sum()))
+
+        # هنا خاص يبقى graph/table كامل
+        st.markdown("### 📊 Top 10 besoins sur 30 jours")
 
         # =========================
 # KPI Forecast Pro
