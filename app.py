@@ -503,6 +503,7 @@ param = data["param"]
 conso = data["conso"]
 mrp = data["mrp"]
 fournisseurs = data["fournisseurs"]
+forecast = data["forecast"]
 
 mrp_long = prepare_mrp(mrp)
 
