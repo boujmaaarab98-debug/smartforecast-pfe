@@ -959,7 +959,7 @@ st.dataframe(
 
 st.markdown("### 🚨 Top produits à risque")
 
-        urgent = forecast[forecast["risque"] == "URGENT"]
+urgent = forecast[forecast["risque"] == "URGENT"]
 
 st.dataframe(
             urgent,
