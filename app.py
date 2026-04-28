@@ -877,6 +877,55 @@ with tab_plan:
             mime="application/pdf",
         )
 
+# =========================
+# FORECAST IA
+# =========================
+with tab_forecast:
+
+    st.subheader("🔮 Prévisions intelligentes")
+
+    if forecast.empty:
+        st.warning("Aucune donnée forecast disponible.")
+    else:
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Produits prévus", len(forecast))
+
+        with c2:
+            st.metric("Forecast total 7j", int(forecast["forecast_7j"].sum()))
+
+        with c3:
+            st.metric("Forecast total 30j", int(forecast["forecast_30j"].sum()))
+
+        st.markdown("### 📈 Prévisions détaillées")
+
+        st.dataframe(
+            forecast[
+                [
+                    "code_mp",
+                    "designation",
+                    "stock_actuel",
+                    "forecast_7j",
+                    "forecast_14j",
+                    "forecast_30j",
+                    "conso_moy_jour_prevue",
+                    "couverture_j",
+                    "risque",
+                    "action"
+                ]
+            ],
+            use_container_width=True
+        )
+
+        st.markdown("### 🚨 Top produits à risque")
+
+        urgent = forecast[forecast["risque"] == "URGENT"]
+
+        st.dataframe(
+            urgent,
+            use_container_width=True
+        )
 
 # ======================
 # IA
