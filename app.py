@@ -533,7 +533,6 @@ mrp_period = mrp_long[
 
 plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 top_action = plan.head(10)
-forecast = data["forecast"]
 
 tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
     [
