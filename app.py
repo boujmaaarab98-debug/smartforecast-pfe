@@ -18,7 +18,6 @@ from data.google_sheets import load_all_data
 # CONFIG
 # ======================
 st.set_page_config(page_title="MRP Pro V5", page_icon="🏭", layout="wide")
-
 PASSWORD = "1234"
 
 
@@ -298,32 +297,33 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     df["conso_moy_jour_kg"] = df["besoin_periode_kg"] / nb_days
     df["stock_securite_kg"] = df["conso_moy_jour_kg"] * 3
 
-    df["couverture_j"] = 999999
-mask_conso = df["conso_moy_jour_kg"] > 0
-
-df.loc[mask_conso, "couverture_j"] = (
-    df.loc[mask_conso, "stock_actuel"].to_numpy()
-    / df.loc[mask_conso, "conso_moy_jour_kg"].to_numpy()
-)
+    df["couverture_j"] = (
+        df["stock_actuel"] / df["conso_moy_jour_kg"].replace(0, pd.NA)
+    ).fillna(999999)
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
 
-    df["qte_commande"] = df.apply(
-        lambda r: 0
-        if r["manque"] <= 0
-        else math.ceil(r["manque"] / r["moq_kg"]) * r["moq_kg"]
-        if r["moq_kg"] > 0
-        else r["manque"],
-        axis=1,
-    )
+    def calculate_qte(row):
+        manque = row["manque"]
+        moq = row["moq_kg"]
 
+        if manque <= 0:
+            return 0
+
+        if moq <= 0:
+            return manque
+
+        return math.ceil(manque / moq) * moq
+
+    df["qte_commande"] = df.apply(calculate_qte, axis=1)
     df["a_commander"] = df["qte_commande"] > 0
+
     df["date_besoin"] = pd.to_datetime(df["date_besoin"], errors="coerce")
     df["date_commande"] = df["date_besoin"] - pd.to_timedelta(df["lead_time_j"], unit="D")
 
-    def risk_label(r):
-        cov = r["couverture_j"]
+    def risk_label(row):
+        cov = row["couverture_j"]
 
         if cov <= 4:
             return "URGENT"
