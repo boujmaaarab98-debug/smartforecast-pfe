@@ -939,7 +939,7 @@ st.bar_chart(
 )
 st.markdown("### 📈 Prévisions détaillées")
 
-        st.dataframe(
+st.dataframe(
             forecast[
                 [
                     "code_mp",
@@ -957,11 +957,11 @@ st.markdown("### 📈 Prévisions détaillées")
             use_container_width=True
         )
 
-        st.markdown("### 🚨 Top produits à risque")
+st.markdown("### 🚨 Top produits à risque")
 
         urgent = forecast[forecast["risque"] == "URGENT"]
 
-        st.dataframe(
+st.dataframe(
             urgent,
             use_container_width=True
         )
