@@ -503,7 +503,6 @@ param = data["param"]
 conso = data["conso"]
 mrp = data["mrp"]
 fournisseurs = data["fournisseurs"]
-forecast = data["forecast"]
 
 mrp_long = prepare_mrp(mrp)
 
@@ -536,7 +535,7 @@ plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_da
 top_action = plan.head(10)
 forecast = data["forecast"]
 
-tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_forecast, tab_ia = st.tabs(
+tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
     [
         "🏠 Dashboard",
         "🚨 Alertes",
@@ -544,7 +543,6 @@ tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_f
         "📦 Matières Premières",
         "🏭 Fournisseurs",
         "📑 Plan Commande",
-        "🔮 Forecast IA",
         "🤖 IA",
     ]
 )
@@ -877,101 +875,6 @@ with tab_plan:
             mime="application/pdf",
         )
 
-# =========================
-# FORECAST IA
-# =========================
-with tab_forecast:
-    st.subheader("🔮 Prévisions intelligentes")
-
-    if forecast.empty:
-        st.warning("Aucune donnée forecast disponible.")
-    else:
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.metric("Produits prévus", len(forecast))
-
-        with c2:
-            st.metric("Forecast total 7j", int(forecast["forecast_7j"].sum()))
-
-        with c3:
-            st.metric("Forecast total 30j", int(forecast["forecast_30j"].sum()))
-
-        # هنا خاص يبقى graph/table كامل
-        st.markdown("### 📊 Top 10 besoins sur 30 jours")
-
-        # =========================
-# KPI Forecast Pro
-# =========================
-
-forecast["couverture_j"] = pd.to_numeric(forecast["couverture_j"], errors="coerce").fillna(0)
-
-forecast["couverture_calc"] = forecast["couverture_j"].clip(lower=0, upper=365)
-
-forecast["date_rupture"] = pd.Timestamp.today().normalize() + pd.to_timedelta(
-    forecast["couverture_calc"],
-    unit="D"
-)
-
-f1, f2, f3 = st.columns(3)
-
-with f1:
-    st.metric(
-        "Urgents futurs",
-        int((forecast["risque"] == "URGENT").sum())
-    )
-
-with f2:
-    st.metric(
-        "Besoin total 30j",
-        int(forecast["forecast_30j"].sum())
-    )
-
-with f3:
-    st.metric(
-        "À commander",
-        int(forecast["qte_a_commander"].sum())
-    )
-
-# =========================
-# Graph Top besoins
-# =========================
-
-top10 = forecast.sort_values("forecast_30j", ascending=False).head(10)
-
-st.markdown("### 📊 Top 10 besoins sur 30 jours")
-
-st.bar_chart(
-    top10.set_index("code_mp")["forecast_30j"]
-)
-st.markdown("### 📈 Prévisions détaillées")
-
-st.dataframe(
-            forecast[
-                [
-                    "code_mp",
-                    "designation",
-                    "stock_actuel",
-                    "forecast_7j",
-                    "forecast_14j",
-                    "forecast_30j",
-                    "conso_moy_jour_prevue",
-                    "couverture_j",
-                    "risque",
-                    "action"
-                ]
-            ],
-            use_container_width=True
-        )
-
-st.markdown("### 🚨 Top produits à risque")
-
-urgent = forecast[forecast["risque"] == "URGENT"]
-
-st.dataframe(
-            urgent,
-            use_container_width=True
-        )
 
 # ======================
 # IA
