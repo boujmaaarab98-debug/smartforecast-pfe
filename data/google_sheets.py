@@ -15,4 +15,5 @@ def load_all_data():
         "mrp": load_sheet("MRP"),
         "fournisseurs": load_sheet("Fournisseurs"),
         "conso": load_sheet("Conso"),
+        "forecast": load_sheet("Forecast"),
     }
