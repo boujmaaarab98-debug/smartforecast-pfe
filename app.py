@@ -937,7 +937,7 @@ st.markdown("### 📊 Top 10 besoins sur 30 jours")
 st.bar_chart(
     top10.set_index("code_mp")["forecast_30j"]
 )
-        st.markdown("### 📈 Prévisions détaillées")
+st.markdown("### 📈 Prévisions détaillées")
 
         st.dataframe(
             forecast[
