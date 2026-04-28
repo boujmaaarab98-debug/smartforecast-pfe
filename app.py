@@ -902,8 +902,13 @@ with tab_forecast:
 # KPI Forecast Pro
 # =========================
 
-forecast["date_rupture"] = pd.to_datetime("today") + pd.to_timedelta(
-    forecast["couverture_j"].fillna(0), unit="D"
+forecast["couverture_j"] = pd.to_numeric(forecast["couverture_j"], errors="coerce").fillna(0)
+
+forecast["couverture_calc"] = forecast["couverture_j"].clip(lower=0, upper=365)
+
+forecast["date_rupture"] = pd.Timestamp.today().normalize() + pd.to_timedelta(
+    forecast["couverture_calc"],
+    unit="D"
 )
 
 f1, f2, f3 = st.columns(3)
