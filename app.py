@@ -898,6 +898,45 @@ with tab_forecast:
         with c3:
             st.metric("Forecast total 30j", int(forecast["forecast_30j"].sum()))
 
+        # =========================
+# KPI Forecast Pro
+# =========================
+
+forecast["date_rupture"] = pd.to_datetime("today") + pd.to_timedelta(
+    forecast["couverture_j"].fillna(0), unit="D"
+)
+
+f1, f2, f3 = st.columns(3)
+
+with f1:
+    st.metric(
+        "Urgents futurs",
+        int((forecast["risque"] == "URGENT").sum())
+    )
+
+with f2:
+    st.metric(
+        "Besoin total 30j",
+        int(forecast["forecast_30j"].sum())
+    )
+
+with f3:
+    st.metric(
+        "À commander",
+        int(forecast["qte_a_commander"].sum())
+    )
+
+# =========================
+# Graph Top besoins
+# =========================
+
+top10 = forecast.sort_values("forecast_30j", ascending=False).head(10)
+
+st.markdown("### 📊 Top 10 besoins sur 30 jours")
+
+st.bar_chart(
+    top10.set_index("code_mp")["forecast_30j"]
+)
         st.markdown("### 📈 Prévisions détaillées")
 
         st.dataframe(
