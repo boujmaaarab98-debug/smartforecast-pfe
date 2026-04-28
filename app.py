@@ -299,10 +299,12 @@ def calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
     df["stock_securite_kg"] = df["conso_moy_jour_kg"] * 3
 
     df["couverture_j"] = 999999
-    mask_conso = df["conso_moy_jour_kg"] > 0
-    df.loc[mask_conso, "couverture_j"] = (
-        df.loc[mask_conso, "stock_actuel"] / df.loc[mask_conso, "conso_moy_jour_kg"]
-    )
+mask_conso = df["conso_moy_jour_kg"] > 0
+
+df.loc[mask_conso, "couverture_j"] = (
+    df.loc[mask_conso, "stock_actuel"].to_numpy()
+    / df.loc[mask_conso, "conso_moy_jour_kg"].to_numpy()
+)
 
     df["besoin_total_kg"] = df["besoin_periode_kg"] + df["stock_securite_kg"]
     df["manque"] = df["besoin_total_kg"] - df["stock_actuel"]
