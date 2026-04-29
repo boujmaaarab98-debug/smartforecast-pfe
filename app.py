@@ -600,7 +600,7 @@ with tab_dashboard:
         st.plotly_chart(fig_status, use_container_width=True)
 
 st.markdown("---")
-    st.subheader("🏭 Analyse interactive Fournisseurs → MP")
+st.subheader("🏭 Analyse interactive Fournisseurs → MP")
 
     df_fourn_cmd = (
         plan[plan["qte_commande"] > 0]
