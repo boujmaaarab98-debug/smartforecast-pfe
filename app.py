@@ -599,7 +599,7 @@ with tab_dashboard:
         fig_status.update_layout(height=380, template="plotly_white")
         st.plotly_chart(fig_status, use_container_width=True)
 
-        st.markdown("---")
+      st.markdown("---")
     st.subheader("🏭 Analyse interactive Fournisseurs → MP")
 
     df_fourn_cmd = (
@@ -614,32 +614,39 @@ with tab_dashboard:
     with colF1:
         st.markdown("### 📊 Commandes par fournisseur")
 
-        if not df_fourn_cmd.empty:
-            fig_fourn = px.bar(
-                df_fourn_cmd,
-                x="nom_fournisseur",
-                y="qte_commande",
-                color="qte_commande",
-                color_continuous_scale="Blues",
-                text="qte_commande"
-            )
-            fig_fourn.update_traces(texttemplate="%{text:.0f}", textposition="outside")
-            fig_fourn.update_layout(height=420, template="plotly_white")
-            st.plotly_chart(fig_fourn, use_container_width=True)
-        else:
-            st.info("Aucune commande fournisseur.")
+        fig_fourn = px.bar(
+            df_fourn_cmd,
+            x="nom_fournisseur",
+            y="qte_commande",
+            color="qte_commande",
+            color_continuous_scale="Blues",
+            text="qte_commande"
+        )
+        fig_fourn.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+        fig_fourn.update_layout(height=420, template="plotly_white")
+
+        event = st.plotly_chart(
+            fig_fourn,
+            use_container_width=True,
+            on_select="rerun",
+            selection_mode="points",
+            key="select_fournisseur_chart"
+        )
+
+    selected_fourn = None
+
+    try:
+        points = event["selection"]["points"]
+        if points:
+            selected_fourn = points[0]["x"]
+    except Exception:
+        selected_fourn = None
 
     with colF2:
-        st.markdown("### 📦 MP liées au fournisseur")
+        st.markdown("### 📦 MP liées au fournisseur sélectionné")
 
-        fournisseurs_list = df_fourn_cmd["nom_fournisseur"].dropna().tolist()
-
-        if fournisseurs_list:
-            selected_fourn = st.selectbox(
-                "Choisir fournisseur",
-                fournisseurs_list,
-                key="dashboard_fournisseur"
-            )
+        if selected_fourn:
+            st.success(f"Fournisseur sélectionné : {selected_fourn}")
 
             df_mp_fourn = (
                 plan[
@@ -662,15 +669,14 @@ with tab_dashboard:
             )
             fig_mp.update_traces(texttemplate="%{text:.0f}", textposition="outside")
             fig_mp.update_layout(height=420, template="plotly_white")
+
             st.plotly_chart(fig_mp, use_container_width=True)
 
-            st.dataframe(
-                df_mp_fourn,
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(df_mp_fourn, use_container_width=True, hide_index=True)
+
         else:
-            st.info("Aucun fournisseur à afficher.")
+            st.info("Clique sur un fournisseur dans le graphique à gauche.")
+            
     st.subheader("🎯 Top actions prioritaires")
     st.dataframe(
         top_action[["code_mp", "designation", "nom_fournisseur", "stock_actuel", "qte_commande", "couverture_j", "date_commande", "statut"]],
