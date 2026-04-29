@@ -484,7 +484,7 @@ def chat_ia_local(question, plan):
 # ======================
 # MAIN
 # ======================
-st.markdown('<div class="section-title">🏭 MRP Pro V5 - Dashboard Intelligent</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">📦 ApproVision MRP</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="section-subtitle">Approvisionnement, stock, matières premières, fournisseurs, plan commande et assistant IA.</div>',
     unsafe_allow_html=True,
