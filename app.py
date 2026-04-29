@@ -611,7 +611,7 @@ df_fourn_cmd = (
 
 colF1, colF2 = st.columns(2)
 
-    with colF1:
+with colF1:
         st.markdown("### 📊 Commandes par fournisseur")
 
         fig_fourn = px.bar(
