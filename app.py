@@ -57,11 +57,13 @@ st.markdown(
 <style>
 .main {background-color:#f6f8fb;}
 
-.section-title{
-    font-size:36px;
-    font-weight:900;
-    color:#0f172a;
-    margin-bottom:4px;
+.section-title {
+    font-size: 42px;
+    font-weight: 800;
+    background: linear-gradient(90deg,#60a5fa,#7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 5px;
 }
 
 .section-subtitle{
