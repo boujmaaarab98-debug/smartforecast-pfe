@@ -677,7 +677,7 @@ with colF2:
         else:
             st.info("Clique sur un fournisseur dans le graphique à gauche.")
             
-    st.subheader("🎯 Top actions prioritaires")
+st.subheader("🎯 Top actions prioritaires")
     st.dataframe(
         top_action[["code_mp", "designation", "nom_fournisseur", "stock_actuel", "qte_commande", "couverture_j", "date_commande", "statut"]],
         use_container_width=True,
