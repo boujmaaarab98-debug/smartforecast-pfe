@@ -599,7 +599,7 @@ with tab_dashboard:
         fig_status.update_layout(height=380, template="plotly_white")
         st.plotly_chart(fig_status, use_container_width=True)
 
-      st.markdown("---")
+st.markdown("---")
     st.subheader("🏭 Analyse interactive Fournisseurs → MP")
 
     df_fourn_cmd = (
