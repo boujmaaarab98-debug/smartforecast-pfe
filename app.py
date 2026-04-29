@@ -602,7 +602,7 @@ with tab_dashboard:
 st.markdown("---")
 st.subheader("🏭 Analyse interactive Fournisseurs → MP")
 
-    df_fourn_cmd = (
+df_fourn_cmd = (
         plan[plan["qte_commande"] > 0]
         .groupby("nom_fournisseur", as_index=False)["qte_commande"]
         .sum()
