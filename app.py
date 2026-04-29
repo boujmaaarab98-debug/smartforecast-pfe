@@ -633,7 +633,7 @@ with colF1:
             key="select_fournisseur_chart"
         )
 
-    selected_fourn = None
+selected_fourn = None
 
     try:
         points = event["selection"]["points"]
