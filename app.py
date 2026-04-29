@@ -609,7 +609,7 @@ df_fourn_cmd = (
         .sort_values("qte_commande", ascending=False)
     )
 
-    colF1, colF2 = st.columns(2)
+colF1, colF2 = st.columns(2)
 
     with colF1:
         st.markdown("### 📊 Commandes par fournisseur")
