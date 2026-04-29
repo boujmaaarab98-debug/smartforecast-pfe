@@ -599,19 +599,19 @@ with tab_dashboard:
         fig_status.update_layout(height=380, template="plotly_white")
         st.plotly_chart(fig_status, use_container_width=True)
 
-st.markdown("---")
-st.subheader("🏭 Analyse interactive Fournisseurs → MP")
+    st.markdown("---")
+    st.subheader("🏭 Analyse interactive Fournisseurs → MP")
 
-df_fourn_cmd = (
+    df_fourn_cmd = (
         plan[plan["qte_commande"] > 0]
         .groupby("nom_fournisseur", as_index=False)["qte_commande"]
         .sum()
         .sort_values("qte_commande", ascending=False)
     )
 
-colF1, colF2 = st.columns(2)
+    colF1, colF2 = st.columns(2)
 
-with colF1:
+    with colF1:
         st.markdown("### 📊 Commandes par fournisseur")
 
         fig_fourn = px.bar(
@@ -633,16 +633,16 @@ with colF1:
             key="select_fournisseur_chart"
         )
 
-selected_fourn = None
+    selected_fourn = None
 
-try:
+    try:
         points = event["selection"]["points"]
         if points:
             selected_fourn = points[0]["x"]
-except Exception:
+    except Exception:
         selected_fourn = None
 
-with colF2:
+    with colF2:
         st.markdown("### 📦 MP liées au fournisseur sélectionné")
 
         if selected_fourn:
