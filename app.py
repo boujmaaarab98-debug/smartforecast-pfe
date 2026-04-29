@@ -639,7 +639,7 @@ try:
         points = event["selection"]["points"]
         if points:
             selected_fourn = points[0]["x"]
-    except Exception:
+except Exception:
         selected_fourn = None
 
 with colF2:
