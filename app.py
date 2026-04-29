@@ -635,14 +635,14 @@ with colF1:
 
 selected_fourn = None
 
-    try:
+try:
         points = event["selection"]["points"]
         if points:
             selected_fourn = points[0]["x"]
     except Exception:
         selected_fourn = None
 
-    with colF2:
+with colF2:
         st.markdown("### 📦 MP liées au fournisseur sélectionné")
 
         if selected_fourn:
