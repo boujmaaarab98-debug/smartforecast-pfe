@@ -599,6 +599,78 @@ with tab_dashboard:
         fig_status.update_layout(height=380, template="plotly_white")
         st.plotly_chart(fig_status, use_container_width=True)
 
+        st.markdown("---")
+    st.subheader("🏭 Analyse interactive Fournisseurs → MP")
+
+    df_fourn_cmd = (
+        plan[plan["qte_commande"] > 0]
+        .groupby("nom_fournisseur", as_index=False)["qte_commande"]
+        .sum()
+        .sort_values("qte_commande", ascending=False)
+    )
+
+    colF1, colF2 = st.columns(2)
+
+    with colF1:
+        st.markdown("### 📊 Commandes par fournisseur")
+
+        if not df_fourn_cmd.empty:
+            fig_fourn = px.bar(
+                df_fourn_cmd,
+                x="nom_fournisseur",
+                y="qte_commande",
+                color="qte_commande",
+                color_continuous_scale="Blues",
+                text="qte_commande"
+            )
+            fig_fourn.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+            fig_fourn.update_layout(height=420, template="plotly_white")
+            st.plotly_chart(fig_fourn, use_container_width=True)
+        else:
+            st.info("Aucune commande fournisseur.")
+
+    with colF2:
+        st.markdown("### 📦 MP liées au fournisseur")
+
+        fournisseurs_list = df_fourn_cmd["nom_fournisseur"].dropna().tolist()
+
+        if fournisseurs_list:
+            selected_fourn = st.selectbox(
+                "Choisir fournisseur",
+                fournisseurs_list,
+                key="dashboard_fournisseur"
+            )
+
+            df_mp_fourn = (
+                plan[
+                    (plan["nom_fournisseur"] == selected_fourn) &
+                    (plan["qte_commande"] > 0)
+                ]
+                .groupby(["code_mp", "designation"], as_index=False)["qte_commande"]
+                .sum()
+                .sort_values("qte_commande", ascending=False)
+            )
+
+            fig_mp = px.bar(
+                df_mp_fourn,
+                x="code_mp",
+                y="qte_commande",
+                hover_data=["designation"],
+                color="qte_commande",
+                color_continuous_scale="Oranges",
+                text="qte_commande"
+            )
+            fig_mp.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+            fig_mp.update_layout(height=420, template="plotly_white")
+            st.plotly_chart(fig_mp, use_container_width=True)
+
+            st.dataframe(
+                df_mp_fourn,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Aucun fournisseur à afficher.")
     st.subheader("🎯 Top actions prioritaires")
     st.dataframe(
         top_action[["code_mp", "designation", "nom_fournisseur", "stock_actuel", "qte_commande", "couverture_j", "date_commande", "statut"]],
