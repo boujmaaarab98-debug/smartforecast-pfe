@@ -915,49 +915,70 @@ with tab_stock:
 # ======================
 # MP
 # ======================
-    with tab_mp:
+with tab_mp:
     st.subheader("📦 Articles")
 
     article_type = st.radio(
-    "Type d'article",
-    ["MP", "C"],
-    horizontal=True,
-    key="article_type_mp"
-)
+        "Type d'article",
+        ["MP", "C"],
+        horizontal=True,
+        key="article_type_mp"
+    )
 
     plan_articles = plan[
-    plan["type_article"].astype(str).str.upper() == article_type
-].copy()
+        plan["type_article"].astype(str).str.upper() == article_type
+    ].copy()
 
     label_article = "MP" if article_type == "MP" else "Composant"
 
-    mp = st.selectbox(
-    f"Choisir {label_article}",
-    sorted(plan_articles["code_mp"].astype(str).unique())
-)
-    r = plan_articles[plan_articles["code_mp"].astype(str) == mp].iloc[0]
+    if plan_articles.empty:
+        st.warning(f"Aucun article trouvé pour le type {label_article}.")
+    else:
+        mp = st.selectbox(
+            f"Choisir {label_article}",
+            sorted(plan_articles["code_mp"].astype(str).unique())
+        )
 
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Stock actuel", round(r["stock_actuel"], 2))
-    with m2:
-        st.metric("Besoin période", round(r["besoin_periode_kg"], 2))
-    with m3:
-        st.metric("Qté commande", round(r["qte_commande"], 2))
-    with m4:
-        st.metric("Couverture", round(r["couverture_j"], 2) if r["couverture_j"] != 999999 else 0)
+        r = plan_articles[
+            plan_articles["code_mp"].astype(str) == mp
+        ].iloc[0]
 
-    st.write("**Fournisseur :**", r["nom_fournisseur"])
-    st.write("**Désignation :**", r["designation"])
-    st.write("**PF liés :**", r["liste_pf"])
+        m1, m2, m3, m4 = st.columns(4)
 
-    st.subheader("Table MP")
-    st.dataframe(
-        plan[["code_mp", "designation", "nom_fournisseur", "stock_actuel", "besoin_periode_kg", "qte_commande", "liste_pf", "statut"]],
-        use_container_width=True,
-        hide_index=True,
-    )
+        with m1:
+            st.metric("Stock actuel", round(r["stock_actuel"], 2))
+        with m2:
+            st.metric("Besoin période", round(r["besoin_periode_kg"], 2))
+        with m3:
+            st.metric("Qté commande", round(r["qte_commande"], 2))
+        with m4:
+            st.metric(
+                "Couverture",
+                round(r["couverture_j"], 2) if r["couverture_j"] != 999999 else 0
+            )
 
+        st.write("**Fournisseur :**", r["nom_fournisseur"])
+        st.write("**Désignation :**", r["designation"])
+        st.write("**PF liés :**", r["liste_pf"])
+
+        st.subheader(f"Table {label_article}")
+
+        st.dataframe(
+            plan_articles[
+                [
+                    "code_mp",
+                    "designation",
+                    "nom_fournisseur",
+                    "stock_actuel",
+                    "besoin_periode_kg",
+                    "qte_commande",
+                    "liste_pf",
+                    "statut"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
 
 # ======================
 # FOURNISSEURS
