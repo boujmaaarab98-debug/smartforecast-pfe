@@ -154,11 +154,31 @@ def get_data():
 # ======================
 def prepare_param(param):
     df = param.copy()
+    df.columns = [str(c).strip() for c in df.columns]
+
+    df = df.rename(
+        columns={
+            "moq": "moq_kg",
+            "MOQ": "moq_kg",
+            "MOQ KG": "moq_kg",
+            "Unité": "unite",
+            "Unite": "unite",
+        }
+    )
+
     df["code_mp"] = df["code_mp"].astype(str).str.strip()
     df["designation"] = df["designation"].astype(str).str.strip()
+
+    if "type_article" not in df.columns:
+        df["type_article"] = ""
+
+    if "unite" not in df.columns:
+        df["unite"] = ""
+
     df["lead_time_j"] = clean_numeric(df["lead_time_j"]).fillna(0)
     df["moq_kg"] = clean_numeric(df["moq_kg"]).fillna(0)
     df["stock_actuel"] = clean_numeric(df["stock_actuel"]).fillna(0)
+
     return df
 
 
