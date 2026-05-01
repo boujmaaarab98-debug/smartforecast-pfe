@@ -846,7 +846,7 @@ with tab_stock:
         st.plotly_chart(fig_cov, use_container_width=True)
 
     with c2:
-        st.subheader("📦 Stock par MP")
+        st.subheader("📦 Stock par articles")
         top_stock = plan.sort_values("stock_actuel", ascending=False).head(10)
         fig_stock = px.bar(top_stock, x="code_mp", y="stock_actuel", color="stock_actuel", color_continuous_scale="Teal")
         fig_stock.update_layout(height=360, template="plotly_white")
