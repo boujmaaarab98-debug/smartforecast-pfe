@@ -669,26 +669,7 @@ with tab_dashboard:
         else:
             st.info("Aucune commande à afficher pour ce type.")
 
-    with colB:
-        st.subheader(f"🧭 {titre_statut}")
-
-        if not plan_vue.empty:
-            status_df = plan_vue["statut"].value_counts().reset_index()
-            status_df.columns = ["statut", "count"]
-
-            fig_status = px.pie(
-                status_df,
-                names="statut",
-                values="count",
-                hole=0.55,
-                color="statut",
-                color_discrete_map=status_colors
-            )
-            fig_status.update_layout(height=380, template="plotly_white")
-            st.plotly_chart(fig_status, use_container_width=True, key=f"status_chart_left_{vue_type}")
-        else:
-            st.info("Aucune donnée pour ce type.")
-
+    
     with colB:
         st.subheader("🧭 Répartition statuts")
         status_df = plan["statut"].value_counts().reset_index()
