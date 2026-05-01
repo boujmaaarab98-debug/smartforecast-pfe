@@ -862,8 +862,8 @@ with c2:
         fig_stock.update_layout(height=360, template="plotly_white")
         st.plotly_chart(fig_stock, use_container_width=True)
 
-        st.subheader("Table Stock")
-        st.dataframe(
+st.subheader("Table Stock")
+st.dataframe(
         plan[["code_mp", "designation", "stock_actuel", "conso_moy_jour_kg", "couverture_j", "lead_time_j", "statut"]],
         use_container_width=True,
         hide_index=True,
