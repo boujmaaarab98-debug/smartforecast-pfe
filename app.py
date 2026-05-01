@@ -827,48 +827,90 @@ with tab_stock:
     stock_dormant = int((plan["besoin_periode_kg"] == 0).sum())
 
     s1, s2, s3, s4 = st.columns(4)
+
     with s1:
-        st.metric("Stock total kg", stock_total)
+        st.metric("Stock total", stock_total)
+
     with s2:
-        st.metric("MP risque rupture", stock_risque)
+        st.metric("Articles risque rupture", stock_risque)
+
     with s3:
-        st.metric("MP OK", stock_ok)
+        st.metric("Articles OK", stock_ok)
+
     with s4:
         st.metric("Stock dormant", stock_dormant)
 
     stock_vue = st.radio(
-    "Filtrer stock",
-    ["MP", "C"],
-    horizontal=True,
-    key="stock_vue"
-)
-
-stock_plan = plan[
-    plan["type_article"].astype(str).str.upper() == stock_vue
-].copy()
-c1, c2 = st.columns(2)
-
-with c1:
-        st.subheader("📉 Couverture stock faible - Articles")
-        low_cov = stock_plan[stock_plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
-        fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map=status_colors)
-        fig_cov.update_layout(height=360, template="plotly_white")
-        st.plotly_chart(fig_cov, use_container_width=True)
-
-with c2:
-        st.subheader("📦 Stock par articles")
-        top_stock = stock_plan.sort_values("stock_actuel", ascending=False).head(10)
-        fig_stock = px.bar(top_stock, x="code_mp", y="stock_actuel", color="stock_actuel", color_continuous_scale="Teal")
-        fig_stock.update_layout(height=360, template="plotly_white")
-        st.plotly_chart(fig_stock, use_container_width=True)
-
-st.subheader("Table Stock")
-st.dataframe(
-        plan[["code_mp", "designation", "stock_actuel", "conso_moy_jour_kg", "couverture_j", "lead_time_j", "statut"]],
-        use_container_width=True,
-        hide_index=True,
+        "Filtrer stock",
+        ["MP", "C"],
+        horizontal=True,
+        key="stock_vue"
     )
 
+    stock_plan = plan[
+        plan["type_article"].astype(str).str.upper() == stock_vue
+    ].copy()
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("📉 Couverture stock faible")
+
+        low_cov = (
+            stock_plan[stock_plan["couverture_j"] != 999999]
+            .sort_values("couverture_j")
+            .head(10)
+        )
+
+        fig_cov = px.bar(
+            low_cov,
+            x="code_mp",
+            y="couverture_j",
+            color="statut",
+            color_discrete_map=status_colors
+        )
+
+        fig_cov.update_layout(height=360, template="plotly_white")
+        st.plotly_chart(fig_cov, use_container_width=True, key=f"stock_cov_{stock_vue}")
+
+    with c2:
+        st.subheader("📦 Stock par article")
+
+        top_stock = (
+            stock_plan
+            .sort_values("stock_actuel", ascending=False)
+            .head(10)
+        )
+
+        fig_stock = px.bar(
+            top_stock,
+            x="code_mp",
+            y="stock_actuel",
+            color="stock_actuel",
+            color_continuous_scale="Teal"
+        )
+
+        fig_stock.update_layout(height=360, template="plotly_white")
+        st.plotly_chart(fig_stock, use_container_width=True, key=f"stock_article_{stock_vue}")
+
+    st.subheader("Table Stock")
+
+    st.dataframe(
+        stock_plan[
+            [
+                "code_mp",
+                "designation",
+                "type_article",
+                "stock_actuel",
+                "conso_moy_jour_kg",
+                "couverture_j",
+                "lead_time_j",
+                "statut"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True
+    )
 
 # ======================
 # MP
