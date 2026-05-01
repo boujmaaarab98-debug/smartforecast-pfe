@@ -848,93 +848,114 @@ with tab_stock:
     with s4:
         st.metric("Stock dormant", stock_dormant)
 
+    if "selected_stock_article" not in st.session_state:
+        st.session_state.selected_stock_article = None
+
     st.markdown("---")
 
     # ======================
-    # GRAPH 1 : COUVERTURE
-    # ======================
-    st.subheader("📉 Couverture stock faible")
-
-    low_cov = (
-        stock_plan[stock_plan["couverture_j"] != 999999]
-        .sort_values("couverture_j")
-    )
-
-    fig_cov = px.bar(
-        low_cov,
-        x="code_mp",
-        y="couverture_j",
-        color="statut",
-        color_discrete_map=status_colors,
-        hover_data=["designation", "stock_actuel", "qte_commande"]
-    )
-
-    fig_cov.update_layout(
-        height=520,
-        template="plotly_white",
-        xaxis_tickangle=-90
-    )
-
-    event_cov = st.plotly_chart(
-        fig_cov,
-        use_container_width=True,
-        key=f"stock_cov_full_{stock_vue}",
-        on_select="rerun",
-        selection_mode="points"
-    )
-
-    selected_article = None
-
-    try:
-        points = event_cov["selection"]["points"]
-        if points:
-            selected_article = points[0]["x"]
-    except Exception:
-        selected_article = None
-
-    # ======================
-    # GRAPH 2 : STOCK
+    # GRAPH STOCK
     # ======================
     st.subheader("📦 Stock par article")
 
-    top_stock = stock_plan.sort_values("stock_actuel", ascending=False)
+    top_stock = stock_plan.sort_values("stock_actuel", ascending=False).copy()
+
+    selected_article = st.session_state.selected_stock_article
+
+    top_stock["highlight"] = top_stock["code_mp"].astype(str).apply(
+        lambda x: "Sélectionné" if x == str(selected_article) else "Autres"
+    )
 
     fig_stock = px.bar(
         top_stock,
         x="code_mp",
         y="stock_actuel",
-        color="stock_actuel",
-        color_continuous_scale="Teal",
+        color="highlight",
+        color_discrete_map={
+            "Sélectionné": "#ff4b4b",
+            "Autres": "rgba(120,180,190,0.35)"
+        },
         hover_data=["designation", "couverture_j", "qte_commande"]
     )
 
     fig_stock.update_layout(
         height=520,
         template="plotly_white",
-        xaxis_tickangle=-90
+        xaxis_tickangle=-90,
+        showlegend=False
     )
 
     event_stock = st.plotly_chart(
         fig_stock,
         use_container_width=True,
-        key=f"stock_article_full_{stock_vue}",
+        key=f"stock_article_highlight_{stock_vue}",
         on_select="rerun",
         selection_mode="points"
     )
 
     try:
-        points2 = event_stock["selection"]["points"]
-        if points2:
-            selected_article = points2[0]["x"]
+        points = event_stock["selection"]["points"]
+        if points:
+            st.session_state.selected_stock_article = points[0]["x"]
+            selected_article = points[0]["x"]
     except Exception:
         pass
 
     # ======================
-    # ARTICLE SELECTIONNE
+    # GRAPH COUVERTURE
     # ======================
+    st.subheader("📉 Couverture stock faible")
+
+    low_cov = (
+        stock_plan[stock_plan["couverture_j"] != 999999]
+        .sort_values("couverture_j")
+        .copy()
+    )
+
+    selected_article = st.session_state.selected_stock_article
+
+    low_cov["highlight"] = low_cov["code_mp"].astype(str).apply(
+        lambda x: "Sélectionné" if x == str(selected_article) else "Autres"
+    )
+
+    fig_cov = px.bar(
+        low_cov,
+        x="code_mp",
+        y="couverture_j",
+        color="highlight",
+        color_discrete_map={
+            "Sélectionné": "#ff4b4b",
+            "Autres": "rgba(160,160,160,0.25)"
+        },
+        hover_data=["designation", "stock_actuel", "qte_commande", "statut"]
+    )
+
+    fig_cov.update_layout(
+        height=520,
+        template="plotly_white",
+        xaxis_tickangle=-90,
+        showlegend=False
+    )
+
+    event_cov = st.plotly_chart(
+        fig_cov,
+        use_container_width=True,
+        key=f"stock_cov_highlight_{stock_vue}",
+        on_select="rerun",
+        selection_mode="points"
+    )
+
+    try:
+        points2 = event_cov["selection"]["points"]
+        if points2:
+            st.session_state.selected_stock_article = points2[0]["x"]
+            selected_article = points2[0]["x"]
+    except Exception:
+        pass
+
     if selected_article:
         st.markdown("---")
-        st.subheader(f"🔎 Détail article sélectionné : {selected_article}")
+        st.subheader(f"🔎 Article sélectionné : {selected_article}")
 
         selected_df = stock_plan[
             stock_plan["code_mp"].astype(str) == str(selected_article)
