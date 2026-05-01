@@ -905,9 +905,9 @@ with m3:
 with m4:
         st.metric("Couverture", round(r["couverture_j"], 2) if r["couverture_j"] != 999999 else 0)
 
-    st.write("**Fournisseur :**", r["nom_fournisseur"])
-    st.write("**Désignation :**", r["designation"])
-    st.write("**PF liés :**", r["liste_pf"])
+st.write("**Fournisseur :**", r["nom_fournisseur"])
+st.write("**Désignation :**", r["designation"])
+st.write("**PF liés :**", r["liste_pf"])
 
 st.subheader("Table MP")
 st.dataframe(
