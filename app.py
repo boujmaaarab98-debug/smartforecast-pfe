@@ -839,7 +839,7 @@ with tab_stock:
     c1, c2 = st.columns(2)
 
     with c1:
-        st.subheader("📉 Couverture stock faible")
+        st.subheader("📉 Couverture stock faible - Articles")
         low_cov = plan[plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
         fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map=status_colors)
         fig_cov.update_layout(height=360, template="plotly_white")
