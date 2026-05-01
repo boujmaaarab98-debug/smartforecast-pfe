@@ -838,7 +838,7 @@ with tab_stock:
 
     stock_vue = st.radio(
     "Filtrer stock",
-    ["Tous", "MP", "C"],
+    ["MP", "C"],
     horizontal=True,
     key="stock_vue"
 )
