@@ -846,7 +846,7 @@ with tab_stock:
 stock_plan = plan[
     plan["type_article"].astype(str).str.upper() == stock_vue
 ].copy()
-    c1, c2 = st.columns(2)
+c1, c2 = st.columns(2)
 
     with c1:
         st.subheader("📉 Couverture stock faible - Articles")
