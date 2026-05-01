@@ -873,21 +873,21 @@ st.dataframe(
 # ======================
 # MP
 # ======================
-with tab_mp:
+    with tab_mp:
     st.subheader("📦 Articles")
 
-article_type = st.radio(
+    article_type = st.radio(
     "Type d'article",
     ["MP", "C"],
     horizontal=True,
     key="article_type_mp"
 )
 
-plan_articles = plan[
+    plan_articles = plan[
     plan["type_article"].astype(str).str.upper() == article_type
 ].copy()
 
-label_article = "MP" if article_type == "MP" else "Composant"
+    label_article = "MP" if article_type == "MP" else "Composant"
 
     mp = st.selectbox(
     f"Choisir {label_article}",
