@@ -607,23 +607,87 @@ with tab_dashboard:
     with r2c3:
         kpi_card("Couverture j", cov, "linear-gradient(135deg,#16a34a,#166534)")
 
+       st.markdown("### 🔎 Filtre analyse")
+    vue_type = st.radio(
+        "Choisir le type d'article",
+        ["Tous", "MP", "C"],
+        horizontal=True,
+        key="vue_type_dashboard"
+    )
+
+    if "type_article" not in plan.columns:
+        plan["type_article"] = "MP"
+
+    if vue_type == "Tous":
+        plan_vue = plan.copy()
+        titre_pareto = "Pareto cumulative Articles"
+        titre_statut = "Répartition statuts Articles"
+    else:
+        plan_vue = plan[plan["type_article"].astype(str).str.upper() == vue_type].copy()
+        titre_pareto = f"Pareto cumulative {vue_type}"
+        titre_statut = f"Répartition statuts {vue_type}"
+
     colA, colB = st.columns(2)
 
     with colA:
-        st.subheader("📊 Pareto cumulative MP")
-        pareto = plan[plan["qte_commande"] > 0][["code_mp", "qte_commande"]].sort_values("qte_commande", ascending=False).head(10)
+        st.subheader(f"📊 {titre_pareto}")
+
+        pareto = (
+            plan_vue[plan_vue["qte_commande"] > 0][["code_mp", "qte_commande"]]
+            .sort_values("qte_commande", ascending=False)
+            .head(10)
+        )
 
         if not pareto.empty:
             pareto["cum_pct"] = pareto["qte_commande"].cumsum() / pareto["qte_commande"].sum() * 100
+
             fig = make_subplots(specs=[[{"secondary_y": True}]])
-            fig.add_trace(go.Bar(x=pareto["code_mp"], y=pareto["qte_commande"], name="Qté commande", marker_color="#2563eb"), secondary_y=False)
-            fig.add_trace(go.Scatter(x=pareto["code_mp"], y=pareto["cum_pct"], name="% cumulé", mode="lines+markers", line=dict(color="#dc2626", width=3)), secondary_y=True)
+            fig.add_trace(
+                go.Bar(
+                    x=pareto["code_mp"],
+                    y=pareto["qte_commande"],
+                    name="Qté commande",
+                    marker_color="#2563eb"
+                ),
+                secondary_y=False
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=pareto["code_mp"],
+                    y=pareto["cum_pct"],
+                    name="% cumulé",
+                    mode="lines+markers",
+                    line=dict(color="#dc2626", width=3)
+                ),
+                secondary_y=True
+            )
+
             fig.update_yaxes(title_text="Qté commande", secondary_y=False)
             fig.update_yaxes(title_text="% cumulé", secondary_y=True, range=[0, 110])
             fig.update_layout(height=380, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Aucune MP à commander.")
+            st.info("Aucune commande à afficher pour ce type.")
+
+    with colB:
+        st.subheader(f"🧭 {titre_statut}")
+
+        if not plan_vue.empty:
+            status_df = plan_vue["statut"].value_counts().reset_index()
+            status_df.columns = ["statut", "count"]
+
+            fig_status = px.pie(
+                status_df,
+                names="statut",
+                values="count",
+                hole=0.55,
+                color="statut",
+                color_discrete_map=status_colors
+            )
+            fig_status.update_layout(height=380, template="plotly_white")
+            st.plotly_chart(fig_status, use_container_width=True)
+        else:
+            st.info("Aucune donnée pour ce type.")
 
     with colB:
         st.subheader("🧭 Répartition statuts")
