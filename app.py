@@ -665,7 +665,7 @@ with tab_dashboard:
             fig.update_yaxes(title_text="Qté commande", secondary_y=False)
             fig.update_yaxes(title_text="% cumulé", secondary_y=True, range=[0, 110])
             fig.update_layout(height=380, template="plotly_white")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"pareto_chart_{vue_type}")
         else:
             st.info("Aucune commande à afficher pour ce type.")
 
