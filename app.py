@@ -893,7 +893,7 @@ mp = st.selectbox(
     f"Choisir {label_article}",
     sorted(plan_articles["code_mp"].astype(str).unique())
 )
-r = plan_articles[plan_articles["code_mp"].astype(str) == mp].iloc[0]
+    r = plan_articles[plan_articles["code_mp"].astype(str) == mp].iloc[0]
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
