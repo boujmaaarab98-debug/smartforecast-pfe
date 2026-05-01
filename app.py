@@ -874,9 +874,25 @@ st.dataframe(
 # MP
 # ======================
 with tab_mp:
-    st.subheader("📦 Matières Premières")
+    st.subheader("📦 Articles")
 
-    mp = st.selectbox("Choisir MP", sorted(plan["code_mp"].astype(str).unique()))
+article_type = st.radio(
+    "Type d'article",
+    ["MP", "C"],
+    horizontal=True,
+    key="article_type_mp"
+)
+
+plan_articles = plan[
+    plan["type_article"].astype(str).str.upper() == article_type
+].copy()
+
+label_article = "MP" if article_type == "MP" else "Composant"
+
+mp = st.selectbox(
+    f"Choisir {label_article}",
+    sorted(plan_articles["code_mp"].astype(str).unique())
+)
     r = plan[plan["code_mp"].astype(str) == mp].iloc[0]
 
     m1, m2, m3, m4 = st.columns(4)
