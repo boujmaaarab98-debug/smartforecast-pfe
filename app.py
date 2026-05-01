@@ -895,7 +895,7 @@ mp = st.selectbox(
 )
 r = plan_articles[plan_articles["code_mp"].astype(str) == mp].iloc[0]
 
-    m1, m2, m3, m4 = st.columns(4)
+m1, m2, m3, m4 = st.columns(4)
     with m1:
         st.metric("Stock actuel", round(r["stock_actuel"], 2))
     with m2:
