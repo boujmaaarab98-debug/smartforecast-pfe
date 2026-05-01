@@ -685,7 +685,7 @@ with tab_dashboard:
                 color_discrete_map=status_colors
             )
             fig_status.update_layout(height=380, template="plotly_white")
-            st.plotly_chart(fig_status, use_container_width=True)
+            st.plotly_chart(fig_status, use_container_width=True, key=f"status_chart_{vue_type}")
         else:
             st.info("Aucune donnée pour ce type.")
 
@@ -695,7 +695,7 @@ with tab_dashboard:
         status_df.columns = ["statut", "count"]
         fig_status = px.pie(status_df, names="statut", values="count", hole=0.55, color="statut", color_discrete_map=status_colors)
         fig_status.update_layout(height=380, template="plotly_white")
-        st.plotly_chart(fig_status, use_container_width=True)
+        st.plotly_chart(fig_status, use_container_width=True, key=f"status_chart_{vue_type}")
 
     st.markdown("---")
     st.subheader("🏭 Analyse interactive Fournisseurs → MP")
