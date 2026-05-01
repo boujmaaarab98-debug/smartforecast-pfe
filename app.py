@@ -821,25 +821,6 @@ with tab_alertes:
 with tab_stock:
     st.subheader("📊 Analyse Stock")
 
-    stock_total = round(plan["stock_actuel"].sum(), 2)
-    stock_risque = int((plan["couverture_j"] <= 12).sum())
-    stock_ok = int((plan["statut"] == "OK").sum())
-    stock_dormant = int((plan["besoin_periode_kg"] == 0).sum())
-
-    s1, s2, s3, s4 = st.columns(4)
-
-    with s1:
-        st.metric("Stock total", stock_total)
-
-    with s2:
-        st.metric("Articles risque rupture", stock_risque)
-
-    with s3:
-        st.metric("Articles OK", stock_ok)
-
-    with s4:
-        st.metric("Stock dormant", stock_dormant)
-
     stock_vue = st.radio(
         "Filtrer stock",
         ["MP", "C"],
@@ -851,48 +832,133 @@ with tab_stock:
         plan["type_article"].astype(str).str.upper() == stock_vue
     ].copy()
 
-    c1, c2 = st.columns(2)
+    stock_total = round(stock_plan["stock_actuel"].sum(), 2)
+    stock_risque = int((stock_plan["couverture_j"] <= 12).sum())
+    stock_ok = int((stock_plan["statut"] == "OK").sum())
+    stock_dormant = int((stock_plan["besoin_periode_kg"] == 0).sum())
 
-    with c1:
-        st.subheader("📉 Couverture stock faible")
+    s1, s2, s3, s4 = st.columns(4)
 
-        low_cov = (
-            stock_plan[stock_plan["couverture_j"] != 999999]
-            .sort_values("couverture_j")
-            .head(10)
+    with s1:
+        st.metric("Stock total", stock_total)
+    with s2:
+        st.metric("Articles risque rupture", stock_risque)
+    with s3:
+        st.metric("Articles OK", stock_ok)
+    with s4:
+        st.metric("Stock dormant", stock_dormant)
+
+    st.markdown("---")
+
+    # ======================
+    # GRAPH 1 : COUVERTURE
+    # ======================
+    st.subheader("📉 Couverture stock faible")
+
+    low_cov = (
+        stock_plan[stock_plan["couverture_j"] != 999999]
+        .sort_values("couverture_j")
+    )
+
+    fig_cov = px.bar(
+        low_cov,
+        x="code_mp",
+        y="couverture_j",
+        color="statut",
+        color_discrete_map=status_colors,
+        hover_data=["designation", "stock_actuel", "qte_commande"]
+    )
+
+    fig_cov.update_layout(
+        height=520,
+        template="plotly_white",
+        xaxis_tickangle=-90
+    )
+
+    event_cov = st.plotly_chart(
+        fig_cov,
+        use_container_width=True,
+        key=f"stock_cov_full_{stock_vue}",
+        on_select="rerun",
+        selection_mode="points"
+    )
+
+    selected_article = None
+
+    try:
+        points = event_cov["selection"]["points"]
+        if points:
+            selected_article = points[0]["x"]
+    except Exception:
+        selected_article = None
+
+    # ======================
+    # GRAPH 2 : STOCK
+    # ======================
+    st.subheader("📦 Stock par article")
+
+    top_stock = stock_plan.sort_values("stock_actuel", ascending=False)
+
+    fig_stock = px.bar(
+        top_stock,
+        x="code_mp",
+        y="stock_actuel",
+        color="stock_actuel",
+        color_continuous_scale="Teal",
+        hover_data=["designation", "couverture_j", "qte_commande"]
+    )
+
+    fig_stock.update_layout(
+        height=520,
+        template="plotly_white",
+        xaxis_tickangle=-90
+    )
+
+    event_stock = st.plotly_chart(
+        fig_stock,
+        use_container_width=True,
+        key=f"stock_article_full_{stock_vue}",
+        on_select="rerun",
+        selection_mode="points"
+    )
+
+    try:
+        points2 = event_stock["selection"]["points"]
+        if points2:
+            selected_article = points2[0]["x"]
+    except Exception:
+        pass
+
+    # ======================
+    # ARTICLE SELECTIONNE
+    # ======================
+    if selected_article:
+        st.markdown("---")
+        st.subheader(f"🔎 Détail article sélectionné : {selected_article}")
+
+        selected_df = stock_plan[
+            stock_plan["code_mp"].astype(str) == str(selected_article)
+        ]
+
+        st.dataframe(
+            selected_df[
+                [
+                    "code_mp",
+                    "designation",
+                    "type_article",
+                    "stock_actuel",
+                    "besoin_periode_kg",
+                    "qte_commande",
+                    "couverture_j",
+                    "nom_fournisseur",
+                    "statut"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
         )
 
-        fig_cov = px.bar(
-            low_cov,
-            x="code_mp",
-            y="couverture_j",
-            color="statut",
-            color_discrete_map=status_colors
-        )
-
-        fig_cov.update_layout(height=360, template="plotly_white")
-        st.plotly_chart(fig_cov, use_container_width=True, key=f"stock_cov_{stock_vue}")
-
-    with c2:
-        st.subheader("📦 Stock par article")
-
-        top_stock = (
-            stock_plan
-            .sort_values("stock_actuel", ascending=False)
-            .head(10)
-        )
-
-        fig_stock = px.bar(
-            top_stock,
-            x="code_mp",
-            y="stock_actuel",
-            color="stock_actuel",
-            color_continuous_scale="Teal"
-        )
-
-        fig_stock.update_layout(height=360, template="plotly_white")
-        st.plotly_chart(fig_stock, use_container_width=True, key=f"stock_article_{stock_vue}")
-
+    st.markdown("---")
     st.subheader("Table Stock")
 
     st.dataframe(
@@ -911,7 +977,6 @@ with tab_stock:
         use_container_width=True,
         hide_index=True
     )
-
 # ======================
 # MP
 # ======================
