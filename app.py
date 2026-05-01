@@ -607,7 +607,7 @@ with tab_dashboard:
     with r2c3:
         kpi_card("Couverture j", cov, "linear-gradient(135deg,#16a34a,#166534)")
 
-       st.markdown("### 🔎 Filtre analyse")
+          st.markdown("### 🔎 Filtre analyse")
     vue_type = st.radio(
         "Choisir le type d'article",
         ["Tous", "MP", "C"],
