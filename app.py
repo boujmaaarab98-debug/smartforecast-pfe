@@ -843,13 +843,9 @@ with tab_stock:
     key="stock_vue"
 )
 
-if stock_vue == "Tous":
-    stock_plan = plan.copy()
-else:
-    stock_plan = plan[
-        plan["type_article"].astype(str).str.upper() == stock_vue
-    ].copy()
-
+stock_plan = plan[
+    plan["type_article"].astype(str).str.upper() == stock_vue
+].copy()
     c1, c2 = st.columns(2)
 
     with c1:
