@@ -164,24 +164,36 @@ def prepare_param(param):
 
 def prepare_conso(conso):
     df = conso.copy()
+    df.columns = [str(c).strip() for c in df.columns]
 
     df = df.rename(
         columns={
+            "Reference": "ref_produit_finis",
+            "Référence": "ref_produit_finis",
             "Ref produit finis": "ref_produit_finis",
+            "composant": "code_mp",
+            "Composant": "code_mp",
             "CODE matière": "code_mp",
+            "Quantité": "conso_unit",
+            "Quantite": "conso_unit",
             "conso_unitaire": "conso_unit",
+            "Unité": "unite",
+            "Unite": "unite",
         }
     )
 
     required = ["ref_produit_finis", "code_mp", "conso_unit"]
     for col in required:
         if col not in df.columns:
-            st.error(f"Colonne manquante dans Conso : {col}")
+            st.error(f"Colonne manquante dans Conso/BOM : {col}")
             st.stop()
 
     df["ref_produit_finis"] = df["ref_produit_finis"].astype(str).str.strip()
     df["code_mp"] = df["code_mp"].astype(str).str.strip()
     df["conso_unit"] = clean_numeric(df["conso_unit"]).fillna(0)
+
+    if "unite" not in df.columns:
+        df["unite"] = ""
 
     return df[df["conso_unit"] > 0]
 
