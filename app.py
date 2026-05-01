@@ -836,18 +836,32 @@ with tab_stock:
     with s4:
         st.metric("Stock dormant", stock_dormant)
 
+    stock_vue = st.radio(
+    "Filtrer stock",
+    ["Tous", "MP", "C"],
+    horizontal=True,
+    key="stock_vue"
+)
+
+if stock_vue == "Tous":
+    stock_plan = plan.copy()
+else:
+    stock_plan = plan[
+        plan["type_article"].astype(str).str.upper() == stock_vue
+    ].copy()
+
     c1, c2 = st.columns(2)
 
     with c1:
         st.subheader("📉 Couverture stock faible - Articles")
-        low_cov = plan[plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
+        low_cov = stock_plan[stock_plan["couverture_j"] != 999999].sort_values("couverture_j").head(10)
         fig_cov = px.bar(low_cov, x="code_mp", y="couverture_j", color="statut", color_discrete_map=status_colors)
         fig_cov.update_layout(height=360, template="plotly_white")
         st.plotly_chart(fig_cov, use_container_width=True)
 
     with c2:
         st.subheader("📦 Stock par articles")
-        top_stock = plan.sort_values("stock_actuel", ascending=False).head(10)
+        top_stock = stock_plan.sort_values("stock_actuel", ascending=False).head(10)
         fig_stock = px.bar(top_stock, x="code_mp", y="stock_actuel", color="stock_actuel", color_continuous_scale="Teal")
         fig_stock.update_layout(height=360, template="plotly_white")
         st.plotly_chart(fig_stock, use_container_width=True)
