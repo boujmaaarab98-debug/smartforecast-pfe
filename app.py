@@ -1203,7 +1203,7 @@ st.dataframe(
         twin[cols_exist],
         use_container_width=True,
         hide_index=True
-    )
+)
     )
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
