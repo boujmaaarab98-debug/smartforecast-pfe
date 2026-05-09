@@ -546,16 +546,46 @@ st.sidebar.header("Configuration période")
 date_min = mrp_long["date"].min().date()
 date_max = mrp_long["date"].max().date()
 
+today_date = pd.Timestamp.today().date()
+
+default_start = today_date
+if default_start < date_min:
+    default_start = date_min
+if default_start > date_max:
+    default_start = date_min
+
 mode = st.sidebar.selectbox("Mode période", ["Durée prédéfinie", "Intervalle manuel"])
 
 if mode == "Durée prédéfinie":
     duree = st.sidebar.selectbox("Durée", ["14 jours", "30 jours", "60 jours", "90 jours"])
     nb_days = {"14 jours": 14, "30 jours": 30, "60 jours": 60, "90 jours": 90}[duree]
-    value=pd.Timestamp.today().date()
-    end_date = min(pd.to_datetime(start_date) + pd.Timedelta(days=nb_days - 1), pd.to_datetime(date_max)).date()
+
+    start_date = st.sidebar.date_input(
+        "Date début",
+        value=default_start,
+        min_value=date_min,
+        max_value=date_max
+    )
+
+    end_date = min(
+        pd.to_datetime(start_date) + pd.Timedelta(days=nb_days - 1),
+        pd.to_datetime(date_max)
+    ).date()
+
 else:
-    value=pd.Timestamp.today().date()
-    end_date = st.sidebar.date_input("Date fin", value=date_max, min_value=date_min, max_value=date_max)
+    start_date = st.sidebar.date_input(
+        "Date début",
+        value=default_start,
+        min_value=date_min,
+        max_value=date_max
+    )
+
+    end_date = st.sidebar.date_input(
+        "Date fin",
+        value=date_max,
+        min_value=date_min,
+        max_value=date_max
+    )
 
 if pd.to_datetime(end_date) < pd.to_datetime(start_date):
     st.error("La date fin doit être supérieure ou égale à la date début.")
