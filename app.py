@@ -1182,25 +1182,28 @@ with tab_twin:
 
     st.markdown("### 📋 Résultat simulation")
 
+        cols_twin = [
+        "code_mp",
+        "designation",
+        "unite",
+        "nom_fournisseur",
+        "conso_unit",
+        "besoin_simule",
+        "stock_actuel",
+        "manque",
+        "moq_kg",
+        "qte_a_commander",
+        "lead_time_j",
+        "statut_simulation"
+    ]
+
+    cols_exist = [c for c in cols_twin if c in twin.columns]
+
     st.dataframe(
-        twin[
-            [
-                "code_mp",
-                "designation",
-                "unite",
-                "nom_fournisseur",
-                "conso_unit",
-                "besoin_simule",
-                "stock_actuel",
-                "manque",
-                "moq_kg",
-                "qte_a_commander",
-                "lead_time_j",
-                "statut_simulation"
-            ]
-        ],
+        twin[cols_exist],
         use_container_width=True,
         hide_index=True
+    )
     )
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
