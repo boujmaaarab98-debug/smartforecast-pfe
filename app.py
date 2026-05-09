@@ -1105,6 +1105,103 @@ with tab_plan:
 # ======================
 # IA
 # ======================
+# ======================
+# DIGITAL TWIN
+# ======================
+with tab_twin:
+    st.subheader("🔁 Digital Twin - Simulation Approvisionnement")
+
+    conso_sim = prepare_conso(conso)
+    param_sim = prepare_param(param)
+    fournisseurs_sim = prepare_fournisseurs(fournisseurs)
+
+    pf_list = sorted(conso_sim["ref_produit_finis"].astype(str).unique())
+
+    pf_selected = st.selectbox("Produit fini à simuler", pf_list)
+    qty_pf = st.number_input("Quantité PF à produire", min_value=0, value=1000, step=100)
+    variation = st.slider("Variation demande (%)", -50, 100, 0)
+    retard_fournisseur = st.number_input("Retard fournisseur simulé (jours)", min_value=0, value=0, step=1)
+
+    qty_simulee = qty_pf * (1 + variation / 100)
+
+    bom_pf = conso_sim[conso_sim["ref_produit_finis"].astype(str) == str(pf_selected)].copy()
+    bom_pf["besoin_simule"] = bom_pf["conso_unit"] * qty_simulee
+
+    twin = bom_pf.merge(param_sim, on="code_mp", how="left")
+    twin = twin.merge(fournisseurs_sim, on="code_mp", how="left")
+
+    twin["stock_actuel"] = twin["stock_actuel"].fillna(0)
+    twin["moq_kg"] = twin["moq_kg"].fillna(0)
+    twin["lead_time_j"] = twin["lead_time_j"].fillna(0) + retard_fournisseur
+
+    twin["manque"] = twin["besoin_simule"] - twin["stock_actuel"]
+    twin["manque"] = twin["manque"].clip(lower=0)
+
+    def twin_qte(row):
+        manque = row["manque"]
+        moq = row["moq_kg"]
+
+        if manque <= 0:
+            return 0
+        if moq <= 0:
+            return manque
+        return math.ceil(manque / moq) * moq
+
+    twin["qte_a_commander"] = twin.apply(twin_qte, axis=1)
+
+    twin["couverture_simulation"] = twin.apply(
+        lambda r: 999999 if r["besoin_simule"] <= 0 else r["stock_actuel"] / r["besoin_simule"],
+        axis=1
+    )
+
+    twin["statut_simulation"] = twin["manque"].apply(
+        lambda x: "RUPTURE" if x > 0 else "OK"
+    )
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("PF simulé", pf_selected)
+    with k2:
+        st.metric("Quantité simulée", int(qty_simulee))
+    with k3:
+        st.metric("Articles nécessaires", len(twin))
+    with k4:
+        st.metric("Articles en manque", int((twin["manque"] > 0).sum()))
+
+    st.markdown("### 📊 Besoin simulé par article")
+
+    fig_twin = px.bar(
+        twin.sort_values("besoin_simule", ascending=False),
+        x="code_mp",
+        y="besoin_simule",
+        color="statut_simulation",
+        hover_data=["designation", "stock_actuel", "manque", "qte_a_commander", "nom_fournisseur"]
+    )
+    fig_twin.update_layout(height=450, template="plotly_white", xaxis_tickangle=-90)
+    st.plotly_chart(fig_twin, use_container_width=True, key="digital_twin_besoin")
+
+    st.markdown("### 📋 Résultat simulation")
+
+    st.dataframe(
+        twin[
+            [
+                "code_mp",
+                "designation",
+                "unite",
+                "nom_fournisseur",
+                "conso_unit",
+                "besoin_simule",
+                "stock_actuel",
+                "manque",
+                "moq_kg",
+                "qte_a_commander",
+                "lead_time_j",
+                "statut_simulation"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True
+    )
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
     question = st.text_input("Pose ta question")
