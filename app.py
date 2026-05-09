@@ -568,14 +568,15 @@ mrp_period = mrp_long[
 plan = calculate_plan(param, conso, mrp_period, fournisseurs, start_date, end_date)
 top_action = plan.head(10)
 
-tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_ia = st.tabs(
+tab_dashboard, tab_alertes, tab_stock, tab_mp, tab_fournisseurs, tab_plan, tab_twin, tab_ia = st.tabs(
     [
         "🏠 Dashboard",
         "🚨 Alertes",
         "📊 Stock",
-        "📦 Matières Premières",
+        "📦 Articles",
         "🏭 Fournisseurs",
         "📑 Plan Commande",
+        "🔁 Digital Twin",
         "🤖 IA",
     ]
 )
