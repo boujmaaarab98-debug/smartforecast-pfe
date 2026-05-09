@@ -1182,7 +1182,7 @@ with tab_twin:
 
     st.markdown("### 📋 Résultat simulation")
 
-        cols_twin = [
+        cols_twin =[
         "code_mp",
         "designation",
         "unite",
