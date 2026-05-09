@@ -551,10 +551,10 @@ mode = st.sidebar.selectbox("Mode période", ["Durée prédéfinie", "Intervalle
 if mode == "Durée prédéfinie":
     duree = st.sidebar.selectbox("Durée", ["14 jours", "30 jours", "60 jours", "90 jours"])
     nb_days = {"14 jours": 14, "30 jours": 30, "60 jours": 60, "90 jours": 90}[duree]
-    start_date = st.sidebar.date_input("Date début", value=date_min, min_value=date_min, max_value=date_max)
+    value=pd.Timestamp.today().date()
     end_date = min(pd.to_datetime(start_date) + pd.Timedelta(days=nb_days - 1), pd.to_datetime(date_max)).date()
 else:
-    start_date = st.sidebar.date_input("Date début", value=date_min, min_value=date_min, max_value=date_max)
+    value=pd.Timestamp.today().date()
     end_date = st.sidebar.date_input("Date fin", value=date_max, min_value=date_min, max_value=date_max)
 
 if pd.to_datetime(end_date) < pd.to_datetime(start_date):
