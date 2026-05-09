@@ -1252,7 +1252,7 @@ else:
     cols_exist = [c for c in cols_twin if c in twin.columns]
 
 st.dataframe(
-        twin[cols_exist],
+        twin.loc[:, cols_exist],
         use_container_width=True,
         hide_index=True
 )
