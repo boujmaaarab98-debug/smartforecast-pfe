@@ -1204,7 +1204,7 @@ st.dataframe(
         use_container_width=True,
         hide_index=True
 )
-    )
+)
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
     question = st.text_input("Pose ta question")
