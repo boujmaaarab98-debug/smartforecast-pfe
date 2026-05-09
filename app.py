@@ -1182,7 +1182,7 @@ with tab_twin:
 
     st.markdown("### 📋 Résultat simulation")
 
-        cols_twin =[
+cols_twin = [
         "code_mp",
         "designation",
         "unite",
@@ -1199,7 +1199,7 @@ with tab_twin:
 
     cols_exist = [c for c in cols_twin if c in twin.columns]
 
-    st.dataframe(
+st.dataframe(
         twin[cols_exist],
         use_container_width=True,
         hide_index=True
