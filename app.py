@@ -1149,7 +1149,29 @@ with tab_twin:
 
     pf_selected = st.selectbox("Produit fini à simuler", pf_list)
     qty_pf = st.number_input("Quantité PF à produire", min_value=0, value=1000, step=100)
-    variation = st.slider("Variation demande (%)", -50, 100, 0)
+    scenario = st.selectbox(
+    "Scénario simulation",
+    [
+        "Normal",
+        "Hausse +20%",
+        "Hausse +50%",
+        "Baisse -20%",
+        "Baisse -40%"
+    ]
+)
+
+if scenario == "Normal":
+    variation = 0
+elif scenario == "Hausse +20%":
+    variation = 20
+elif scenario == "Hausse +50%":
+    variation = 50
+elif scenario == "Baisse -20%":
+    variation = -20
+else:
+    variation = -40
+
+st.metric("Variation demande", f"{variation}%")
     retard_fournisseur = st.number_input("Retard fournisseur simulé (jours)", min_value=0, value=0, step=1)
 
     qty_simulee = qty_pf * (1 + variation / 100)
