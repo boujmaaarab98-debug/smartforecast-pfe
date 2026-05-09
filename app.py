@@ -18,7 +18,6 @@ from data.google_sheets import load_all_data
 # CONFIG
 # ======================
 st.set_page_config(page_title="MRP Pro V5", page_icon="🏭", layout="wide")
-st.image("assets/logo.png", width=360)
 PASSWORD = "1234"
 
 
