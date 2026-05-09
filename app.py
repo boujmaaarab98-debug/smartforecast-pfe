@@ -1171,7 +1171,7 @@ elif scenario == "Baisse -20%":
 else:
     variation = -40
 
-st.metric("Variation demande", f"{variation}%")
+    st.metric("Variation demande", f"{variation}%")
     retard_fournisseur = st.number_input("Retard fournisseur simulé (jours)", min_value=0, value=0, step=1)
 
     qty_simulee = qty_pf * (1 + variation / 100)
