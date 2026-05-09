@@ -1197,7 +1197,7 @@ cols_twin = [
         "statut_simulation"
     ]
 
-    cols_exist = [c for c in cols_twin if c in twin.columns]
+cols_exist = [c for c in cols_twin if c in twin.columns]
 
 st.dataframe(
         twin[cols_exist],
