@@ -1149,34 +1149,44 @@ with tab_twin:
 
     pf_selected = st.selectbox("Produit fini à simuler", pf_list)
     qty_pf = st.number_input("Quantité PF à produire", min_value=0, value=1000, step=100)
-    scenario = st.selectbox(
-    "Scénario simulation",
-    [
-        "Normal",
-        "Hausse +20%",
-        "Hausse +50%",
-        "Baisse -20%",
-        "Baisse -40%"
-    ]
-)
 
-if scenario == "Normal":
-    variation = 0
-elif scenario == "Hausse +20%":
-    variation = 20
-elif scenario == "Hausse +50%":
-    variation = 50
-elif scenario == "Baisse -20%":
-    variation = -20
-else:
-    variation = -40
+    scenario = st.selectbox(
+        "Scénario simulation",
+        [
+            "Normal",
+            "Hausse +20%",
+            "Hausse +50%",
+            "Baisse -20%",
+            "Baisse -40%"
+        ]
+    )
+
+    if scenario == "Normal":
+        variation = 0
+    elif scenario == "Hausse +20%":
+        variation = 20
+    elif scenario == "Hausse +50%":
+        variation = 50
+    elif scenario == "Baisse -20%":
+        variation = -20
+    else:
+        variation = -40
 
     st.metric("Variation demande", f"{variation}%")
-    retard_fournisseur = st.number_input("Retard fournisseur simulé (jours)", min_value=0, value=0, step=1)
+
+    retard_fournisseur = st.number_input(
+        "Retard fournisseur simulé (jours)",
+        min_value=0,
+        value=0,
+        step=1
+    )
 
     qty_simulee = qty_pf * (1 + variation / 100)
 
-    bom_pf = conso_sim[conso_sim["ref_produit_finis"].astype(str) == str(pf_selected)].copy()
+    bom_pf = conso_sim[
+        conso_sim["ref_produit_finis"].astype(str) == str(pf_selected)
+    ].copy()
+
     bom_pf["besoin_simule"] = bom_pf["conso_unit"] * qty_simulee
 
     twin = bom_pf.merge(param_sim, on="code_mp", how="left")
@@ -1211,6 +1221,7 @@ else:
     )
 
     k1, k2, k3, k4 = st.columns(4)
+
     with k1:
         st.metric("PF simulé", pf_selected)
     with k2:
@@ -1227,10 +1238,26 @@ else:
         x="code_mp",
         y="besoin_simule",
         color="statut_simulation",
-        hover_data=["designation", "stock_actuel", "manque", "qte_a_commander", "nom_fournisseur"]
+        hover_data=[
+            "designation",
+            "stock_actuel",
+            "manque",
+            "qte_a_commander",
+            "nom_fournisseur"
+        ]
     )
-    fig_twin.update_layout(height=450, template="plotly_white", xaxis_tickangle=-90)
-    st.plotly_chart(fig_twin, use_container_width=True, key="digital_twin_besoin")
+
+    fig_twin.update_layout(
+        height=450,
+        template="plotly_white",
+        xaxis_tickangle=-90
+    )
+
+    st.plotly_chart(
+        fig_twin,
+        use_container_width=True,
+        key="digital_twin_besoin"
+    )
 
     st.markdown("### 📋 Résultat simulation")
 
@@ -1251,11 +1278,11 @@ else:
 
     cols_exist = [c for c in cols_twin if c in twin.columns]
 
-st.dataframe(
+    st.dataframe(
         twin.loc[:, cols_exist],
         use_container_width=True,
         hide_index=True
-)
+    )
 with tab_ia:
     st.subheader("🤖 Assistant IA - Actions Approvisionnement")
     question = st.text_input("Pose ta question")
